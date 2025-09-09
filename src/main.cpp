@@ -1,19 +1,11 @@
-#include <iostream>
-#include <cstdlib>
 #include "Server.hpp"
+#include <iostream>			// for std::cerr
 
-int main(int argc, char **argv)
-{
-	if (argc != 3)
-	{
-		std::cerr << "Usage: " << argv[0] << " <port> <password>" << std::endl;
-		return 1;
-	}
-
-	int port = atoi(argv[1]);
-	std::string password = argv[2];
+int main(int argc, char** argv) {
 
 	try {
+		std::string password;
+		int port = Server::parseServerArguments(argc, argv, password);
 		Server server(port, password);
 		server.start();
 	} catch (const std::exception& e) {
@@ -22,4 +14,5 @@ int main(int argc, char **argv)
 	}
 
 	return 0;
+	
 }
