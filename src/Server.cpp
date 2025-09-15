@@ -10,6 +10,7 @@
 #include <sys/socket.h>		// for socket, setsockopt, bind, listen, accept, recv, send
 #include <arpa/inet.h>		// for getsockname
 
+
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // 															PRIVATE:
@@ -25,6 +26,7 @@
 void Server::createSocket()
 {
 	_listenFd = socket(AF_INET, SOCK_STREAM, 0);
+	printf("Socket FD: %d\n", _listenFd);
 	if (_listenFd == -1)
 		throw std::runtime_error("socket() failed");
 }
@@ -122,7 +124,7 @@ void Server::handleNewConnection()
 	if (fcntl(clientFd, F_SETFL, O_NONBLOCK) == -1)
 	{
 		close(clientFd);
-		std::cerr << "fcntl() failed on client" << std::endl;
+		std::cerr << "fcntl() failed on client" << std::cerr;
 		return;
 	}
 
@@ -133,32 +135,6 @@ void Server::handleNewConnection()
 	_pfds.push_back(pfd);
 
 	std::cout << "New client connected (fd=" << clientFd << ")" << std::endl;
-}
-
-// handle existing connection
-void Server::handleClientEvent(int i)
-{
-	char buf[512];
-	int clientFd = _pfds[i].fd;
-	int bytes = recv(clientFd, buf, sizeof(buf) - 1, 0);
-
-	if (bytes <= 0)
-	{
-		if (bytes == 0)
-			std::cout << "Client disconnected (fd=" << clientFd << ")" << std::endl;
-		else
-			std::cerr << "recv() error on fd " << clientFd << std::endl;
-
-		close(clientFd);
-		_pfds.erase(_pfds.begin() + i);
-		return;
-	}
-
-	buf[bytes] = '\0';
-	std::cout << "Received from fd=" << clientFd << ": " << buf << std::endl;
-
-	// echo back (placeholder)
-	send(clientFd, buf, bytes, 0);
 }
 
 // handle input from stdin (quit command)
@@ -292,3 +268,4 @@ int Server::parseServerArguments(int argc, char** argv, std::string& password) {
 	password = argv[2];
 	return static_cast<int>(port);
 }
+
