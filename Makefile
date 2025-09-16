@@ -4,7 +4,11 @@ CXXFLAGS  = -Wall -Wextra -Werror -std=c++98 -I./inc -pedantic
 MAKEFLAGS += --no-print-directory -s
 SRCS_DIR  = src
 OBJS_DIR  = obj
-SRCS      = $(addprefix $(SRCS_DIR)/, main.cpp Server.cpp)
+SRCS      = $(addprefix $(SRCS_DIR)/,	\
+			main.cpp					\
+			Server.cpp					\
+			Client.cpp					\
+			)
 OBJS      = $(SRCS:$(SRCS_DIR)/%.cpp=$(OBJS_DIR)/%.o)
 RM        = rm -f
 

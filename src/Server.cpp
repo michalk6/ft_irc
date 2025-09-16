@@ -32,14 +32,14 @@ void Server::createSocket()
 // set socket to non-blocking mode
 void Server::setNonBlocking(int fd)
 {
-    // load existing file descriptor flags
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1)
-        throw std::runtime_error("fcntl(F_GETFL) failed");
+	// load existing file descriptor flags
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (flags == -1)
+		throw std::runtime_error("fcntl(F_GETFL) failed");
 
-    // set non-blocking mode flag
-    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
-        throw std::runtime_error("fcntl(F_SETFL) failed");
+	// set non-blocking mode flag
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+		throw std::runtime_error("fcntl(F_SETFL) failed");
 }
 
 // set socket options
@@ -253,6 +253,30 @@ void Server::start()
 	eventLoop();
 }
 
+// stop server
+void Server::stop()
+{
+	std::cout << "Stopping server..." << std::endl;
+	_running = false;
+	
+	// close all client connections
+	for (size_t i = 0; i < _pfds.size(); ++i)
+	{
+		if (_pfds[i].fd != -1 && _pfds[i].fd != _listenFd && _pfds[i].fd != STDIN_FILENO)
+		{
+			close(_pfds[i].fd);
+			_pfds[i].fd = -1;
+		}
+	}
+	
+	// close listening socket
+	if (_listenFd != -1)
+	{
+		close(_listenFd);
+		_listenFd = -1;
+	}
+}
+
 // check if port is valid
 bool Server::is_valid_port_string(const char* str) {
 	if (!str || *str == '\0') return false;
@@ -262,6 +286,15 @@ bool Server::is_valid_port_string(const char* str) {
 		if (!std::isdigit(str[i])) return false;
 	}
 	return true;
+}
+
+// set port to the port given by user
+void Server::setPortNumber(int p)
+{
+	if (p < 1 || p > 65535)
+		throw std::invalid_argument("Port must be between 1 and 65535");
+	
+	_port = p;
 }
 
 // set port to the port given by user

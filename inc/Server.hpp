@@ -38,11 +38,11 @@ class Server {
 		Server(int port, const std::string& password);		// constructor
 		~Server();											// destructor
 
-		void    		start();															// start server
-		void			stop();																// stop server
-		bool			is_valid_port_string(const char* str);								// check if port is valid
-		void			setPortNumber(int p);												// set port to the port given by user
-		static int		parseServerArguments(int argc, char** argv, std::string& password);	// port validation and password parsing
+		void    	start();															// start server
+		void		stop();																// stop server
+		bool		is_valid_port_string(const char* str);								// check if port is valid
+		void		setPortNumber(int p);												// set port to the port given by user
+		static int	parseServerArguments(int argc, char** argv, std::string& password);	// port validation and password parsing
 
 };
 
