@@ -105,14 +105,14 @@ void Server::setupSocket()
 	startListening();
 }
 
-void Server::addClient(IRCClient *client, int clientFd)
-{
-	if (client)
-	{
-		_clients.push_back(client);
-		client.fd = clientFd;
-	}
-}
+// void Server::addClient(IRCClient *client, int clientFd)
+// {
+// 	if (client)
+// 	{
+// 		_clients.push_back(client);
+// 		// client.fd = clientFd;
+// 	}
+// }
 
 // handle new connection
 void Server::handleNewConnection()
@@ -141,7 +141,7 @@ void Server::handleNewConnection()
 	_pfds.push_back(pfd);
 
 	std::cout << "New client connected (fd=" << clientFd << ")" << std::endl;
-	addClient(new IRCClient(clientFd, inet_ntoa(clientAddr.sin_addr)), clientFd);
+	//addClient(new IRCClient(clientFd, inet_ntoa(clientAddr.sin_addr)), clientFd);
 
 }
 
