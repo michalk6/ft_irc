@@ -1,13 +1,14 @@
 #include "IRCChannel.hpp"
 #include "IRCClient.hpp"
 
-IRCChannel::IRCChannel(const std::string &channelName) : name(channelName) {}
+IRCChannel::IRCChannel(const std::string &channelName)
+	: name(channelName) {}
 
 void IRCChannel::broadcast(const std::string &message, IRCClient *exclude) const
 {
 	for (std::map<int, IRCClient *>::const_iterator it = members.begin(); it != members.end(); ++it)
 	{
-		if (exclude == NULL || it->second != exclude)
+		if (!exclude || it->second != exclude)
 		{
 			it->second->sendMessage(message);
 		}
@@ -16,15 +17,16 @@ void IRCChannel::broadcast(const std::string &message, IRCClient *exclude) const
 
 bool IRCChannel::isOperator(int clientFd) const
 {
-	return operators.find(clientFd) != operators.end();
+	return operators.count(clientFd) > 0;
 }
 
 void IRCChannel::addMember(IRCClient *client)
 {
-	members[client->fd] = client;
+	if (!client) return;
+	members[client->getFd()] = client;
 	if (operators.empty())
 	{
-		operators.insert(client->fd);
+		operators.insert(client->getFd());
 	}
 }
 

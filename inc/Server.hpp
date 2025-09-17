@@ -18,6 +18,7 @@
 #include <poll.h>			// for poll, pollfd
 #include <sstream>
 #include <vector>
+#include "IRCClient.hpp"
 
 class Server {
 
@@ -27,6 +28,7 @@ class Server {
 		int						_listenFd;					// listening socket (to detect that someone is trying to connect)
 		std::vector<pollfd>		_pfds;						// poll file descriptors (list of all sockets we want to monitor using poll())
 		bool					_running;					// flag to check if server is running
+		std::vector<IRCClient*>	_clients;			// list of connected clients
 
 		void createSocket();								// create the listening socket
 		void setNonBlocking(int fd);						// set socket to non-blocking mode
@@ -42,6 +44,9 @@ class Server {
 		void handleKickCommand(int clientFd, const std::string &message);
 		void handleInviteCommand(int clientFd, const std::string &message);
 		void handleTopicCommand(int clientFd, const std::string &message);
+		void handleMsgCommand(int clientFd, const std::string &message);
+		void handelePrivateMessage(int clientFd, const std::string &target, const std::string &msgContent);
+		void addClient(IRCClient *client, int clientFd);
 		/* 	
 			Socket is a system resource that cannot be safely copied.
 			By copying _listenFd and _pfds, both objects will point to the same descriptors. 
