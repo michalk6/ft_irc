@@ -10,6 +10,22 @@
 #include <sys/socket.h> // for socket, setsockopt, bind, listen, accept, recv, send
 #include <arpa/inet.h>	// for getsockname
 
+
+
+
+std::vector<std::string> split(const std::string &str, char delimiter)
+{
+	std::vector<std::string> tokens;
+	std::string token;
+	std::istringstream tokenStream(str);
+
+	while (std::getline(tokenStream, token, delimiter))
+	{
+		tokens.push_back(token);
+	}
+	return tokens;
+}
+
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // 															PRIVATE:
@@ -113,6 +129,18 @@ void Server::setupSocket()
 // 		// client.fd = clientFd;
 // 	}
 // }
+
+IRCClient* Server::findClientByFd(int clientFd)
+{
+    for (size_t i = 0; i < _clients.size(); ++i)
+    {
+        if (_clients[i]->getFd() == clientFd)
+        {
+            return _clients[i];
+        }
+    }
+    return NULL;
+}
 
 // handle new connection
 void Server::handleNewConnection()

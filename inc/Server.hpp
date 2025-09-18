@@ -47,6 +47,11 @@ class Server {
 		void handleMsgCommand(int clientFd, const std::string &message);
 		void handelePrivateMessage(int clientFd, const std::string &target, const std::string &msgContent);
 		void addClient(IRCClient *client, int clientFd);
+		void handleNickCommand(int clientFd, const std::string &message);
+   		void handleUserCommand(int clientFd, const std::string &message);
+   		void handlePassCommand(int clientFd, const std::string &message);
+    	void completeRegistration(IRCClient *client);
+    	IRCClient* findClientByFd(int clientFd);
 		/* 	
 			Socket is a system resource that cannot be safely copied.
 			By copying _listenFd and _pfds, both objects will point to the same descriptors. 
