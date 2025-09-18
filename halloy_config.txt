@@ -1,0 +1,16 @@
+# Halloy config.
+#
+# For a complete list of available options,6 Unknown command
+# please visit https://halloy.chat/configuration/
+
+ping_time = 10
+
+[servers.test1]
+use_tls = false
+server = "localhost"
+port = 13180
+nickname = "test"
+username = "mlibucha"
+realname = "Mateusz"
+password = "pass"
+channels = ["#general"]
