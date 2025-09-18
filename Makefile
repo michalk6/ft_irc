@@ -1,7 +1,7 @@
 NAME      = ircserv
 CXX       = c++
 CXXFLAGS  = -Wall -Wextra -Werror -std=c++98 -I./inc -pedantic
-MAKEFLAGS += --no-print-directory -s
+MAKEFLAGS += --no-print-directory #-s
 SRCS_DIR  = src
 OBJS_DIR  = obj
 SRCS      = $(addprefix $(SRCS_DIR)/,	\
@@ -19,21 +19,21 @@ all: $(NAME)
 	@echo "\033[38;5;154mProgram ready to use.\033[0m"
 
 $(NAME): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+	@$(CXX) $(CXXFLAGS) -o $@ $^
 
 $(OBJS_DIR)/%.o: $(SRCS_DIR)/%.cpp | $(OBJS_DIR)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJS_DIR):
 	@mkdir -p $@
 
 clean:
-	$(RM) -r $(OBJS_DIR)
+	@$(RM) -r $(OBJS_DIR)
 	@echo "\033[38;5;166mObject files removed.\033[0m"
 
 fclean: clean
-	$(RM) $(NAME)
+	@$(RM) $(NAME)
 	@echo "\033[38;5;166mFully cleaned up.\033[0m"
 
 re: fclean all
