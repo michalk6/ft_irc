@@ -1,21 +1,36 @@
 #include "Server.hpp"
-#include <iostream>			// for std::cout, std::cerr
-#include <cstdlib>			// for std::strtol
-#include <stdexcept>		// for std::runtime_error, std::invalid_argument
-#include <cstring>			// for std::memset, std::strerror, strncmp
-#include <cerrno>			// for errno, EINTR
-#include <unistd.h>			// for close, STDIN_FILENO
-#include <fcntl.h>			// for fcntl, O_NONBLOCK, F_SETFL
-#include <netinet/in.h>		// for sockaddr_in, INADDR_ANY, htons
-#include <sys/socket.h>		// for socket, setsockopt, bind, listen, accept, recv, send
-#include <arpa/inet.h>		// for getsockname
+#include <iostream>		// for std::cout, std::cerr
+#include <cstdlib>		// for std::strtol
+#include <stdexcept>	// for std::runtime_error, std::invalid_argument
+#include <cstring>		// for std::memset, std::strerror, strncmp
+#include <cerrno>		// for errno, EINTR
+#include <unistd.h>		// for close, STDIN_FILENO
+#include <fcntl.h>		// for fcntl, O_NONBLOCK, F_SETFL
+#include <netinet/in.h> // for sockaddr_in, INADDR_ANY, htons
+#include <sys/socket.h> // for socket, setsockopt, bind, listen, accept, recv, send
+#include <arpa/inet.h>	// for getsockname
+
+
+
+
+std::vector<std::string> split(const std::string &str, char delimiter)
+{
+	std::vector<std::string> tokens;
+	std::string token;
+	std::istringstream tokenStream(str);
+
+	while (std::getline(tokenStream, token, delimiter))
+	{
+		tokens.push_back(token);
+	}
+	return tokens;
+}
 
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // 															PRIVATE:
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-
 
 // ====================================================================
 // private methods:
@@ -25,6 +40,7 @@
 void Server::createSocket()
 {
 	_listenFd = socket(AF_INET, SOCK_STREAM, 0);
+	printf("Socket FD: %d\n", _listenFd);
 	if (_listenFd == -1)
 		throw std::runtime_error("socket() failed");
 }
@@ -59,7 +75,7 @@ void Server::bindSocket()
 	addr.sin_addr.s_addr = INADDR_ANY;
 	addr.sin_port = htons(_port);
 
-	if (bind(_listenFd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
+	if (bind(_listenFd, (struct sockaddr *)&addr, sizeof(addr)) == -1)
 	{
 		int bind_errno = errno;
 		close(_listenFd);
@@ -68,7 +84,7 @@ void Server::bindSocket()
 
 	// check actual port used by socket
 	socklen_t addrlen = sizeof(addr);
-	if (getsockname(_listenFd, (struct sockaddr*)&addr, &addrlen) == -1)
+	if (getsockname(_listenFd, (struct sockaddr *)&addr, &addrlen) == -1)
 		throw std::runtime_error("getsockname() failed");
 
 	int actual_port = ntohs(addr.sin_port);
@@ -95,7 +111,6 @@ void Server::startListening()
 	std::cout << "Socket setup complete on port " << _port << std::endl;
 }
 
-
 // configure the listening socket
 void Server::setupSocket()
 {
@@ -106,12 +121,33 @@ void Server::setupSocket()
 	startListening();
 }
 
+// void Server::addClient(IRCClient *client, int clientFd)
+// {
+// 	if (client)
+// 	{
+// 		_clients.push_back(client);
+// 		// client.fd = clientFd;
+// 	}
+// }
+
+IRCClient* Server::findClientByFd(int clientFd)
+{
+    for (size_t i = 0; i < _clients.size(); ++i)
+    {
+        if (_clients[i]->getFd() == clientFd)
+        {
+            return _clients[i];
+        }
+    }
+    return NULL;
+}
+
 // handle new connection
 void Server::handleNewConnection()
 {
 	struct sockaddr_in clientAddr;
 	socklen_t addrlen = sizeof(clientAddr);
-	int clientFd = accept(_listenFd, (struct sockaddr*)&clientAddr, &addrlen);
+	int clientFd = accept(_listenFd, (struct sockaddr *)&clientAddr, &addrlen);
 	if (clientFd == -1)
 	{
 		std::cerr << "accept() failed" << std::endl;
@@ -122,7 +158,7 @@ void Server::handleNewConnection()
 	if (fcntl(clientFd, F_SETFL, O_NONBLOCK) == -1)
 	{
 		close(clientFd);
-		std::cerr << "fcntl() failed on client" << std::endl;
+		std::cerr << "fcntl() failed on client" << std::cerr;
 		return;
 	}
 
@@ -133,32 +169,8 @@ void Server::handleNewConnection()
 	_pfds.push_back(pfd);
 
 	std::cout << "New client connected (fd=" << clientFd << ")" << std::endl;
-}
+	//addClient(new IRCClient(clientFd, inet_ntoa(clientAddr.sin_addr)), clientFd);
 
-// handle existing connection
-void Server::handleClientEvent(int i)
-{
-	char buf[512];
-	int clientFd = _pfds[i].fd;
-	int bytes = recv(clientFd, buf, sizeof(buf) - 1, 0);
-
-	if (bytes <= 0)
-	{
-		if (bytes == 0)
-			std::cout << "Client disconnected (fd=" << clientFd << ")" << std::endl;
-		else
-			std::cerr << "recv() error on fd " << clientFd << std::endl;
-
-		close(clientFd);
-		_pfds.erase(_pfds.begin() + i);
-		return;
-	}
-
-	buf[bytes] = '\0';
-	std::cout << "Received from fd=" << clientFd << ": " << buf << std::endl;
-
-	// echo back (placeholder)
-	send(clientFd, buf, bytes, 0);
 }
 
 // handle input from stdin (quit command)
@@ -210,23 +222,20 @@ void Server::eventLoop()
 	}
 }
 
-
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // 															PUBLIC:
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
-
-
 // ====================================================================
 // Orthodox Canonical Form elements:
 // ====================================================================
 
-// constructor 
+// constructor
 //		(_pdfs()		- vector is default initialized to empty)
 //		_listenFd = -1	- socket not created yet
-Server::Server(int port, const std::string& password)
+Server::Server(int port, const std::string &password)
 	: _port(port), _password(password), _listenFd(-1), _pfds(), _running(true) {}
 
 // destructor
@@ -253,72 +262,49 @@ void Server::start()
 	eventLoop();
 }
 
-// stop server
-void Server::stop()
-{
-	std::cout << "Stopping server..." << std::endl;
-	_running = false;
-	
-	// close all client connections
-	for (size_t i = 0; i < _pfds.size(); ++i)
-	{
-		if (_pfds[i].fd != -1 && _pfds[i].fd != _listenFd && _pfds[i].fd != STDIN_FILENO)
-		{
-			close(_pfds[i].fd);
-			_pfds[i].fd = -1;
-		}
-	}
-	
-	// close listening socket
-	if (_listenFd != -1)
-	{
-		close(_listenFd);
-		_listenFd = -1;
-	}
-}
-
 // check if port is valid
-bool Server::is_valid_port_string(const char* str) {
-	if (!str || *str == '\0') return false;
-	if (str[0] == '0' && std::strlen(str) > 1) return false;
+bool Server::is_valid_port_string(const char *str)
+{
+	if (!str || *str == '\0')
+		return false;
+	if (str[0] == '0' && std::strlen(str) > 1)
+		return false;
 
-	for (size_t i = 0; str[i]; ++i) {
-		if (!std::isdigit(str[i])) return false;
+	for (size_t i = 0; str[i]; ++i)
+	{
+		if (!std::isdigit(str[i]))
+			return false;
 	}
 	return true;
 }
 
 // set port to the port given by user
-void Server::setPortNumber(int p)
+int Server::parseServerArguments(int argc, char **argv, std::string &password)
 {
-	if (p < 1 || p > 65535)
-		throw std::invalid_argument("Port must be between 1 and 65535");
-	
-	_port = p;
-}
-
-// set port to the port given by user
-int Server::parseServerArguments(int argc, char** argv, std::string& password) {
 	if (argc != 3)
 		throw std::invalid_argument(std::string("Usage: ") + argv[0] + " <port> <password>");
 
 	std::string portStr = argv[1];
 
 	// check if port number contains only digits
-	for (std::string::size_type i = 0; i < portStr.size(); ++i) {
-		if (!isdigit(portStr[i])) {
+	for (std::string::size_type i = 0; i < portStr.size(); ++i)
+	{
+		if (!isdigit(portStr[i]))
+		{
 			throw std::invalid_argument("Port must contain only digits (no + or -)");
 		}
 	}
 
 	// check if port number contains leading zeros
-	if (portStr.size() > 1 && portStr[0] == '0') {
+	if (portStr.size() > 1 && portStr[0] == '0')
+	{
 		throw std::invalid_argument("Port cannot have leading zeros");
 	}
 
 	// convert port number to long integer
 	long port = std::strtol(portStr.c_str(), NULL, 10);
-	if (port < 1 || port > 65535) {
+	if (port < 1 || port > 65535)
+	{
 		throw std::invalid_argument("Port must be a number between 1 and 65535");
 	}
 
