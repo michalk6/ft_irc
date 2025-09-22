@@ -13,18 +13,18 @@
 
 
 
-std::vector<std::string> split(const std::string &str, char delimiter)
-{
-	std::vector<std::string> tokens;
-	std::string token;
-	std::istringstream tokenStream(str);
+// std::vector<std::string> split(const std::string &str, char delimiter)
+// {
+// 	std::vector<std::string> tokens;
+// 	std::string token;
+// 	std::istringstream tokenStream(str);
 
-	while (std::getline(tokenStream, token, delimiter))
-	{
-		tokens.push_back(token);
-	}
-	return tokens;
-}
+// 	while (std::getline(tokenStream, token, delimiter))
+// 	{
+// 		tokens.push_back(token);
+// 	}
+// 	return tokens;
+// }
 
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -158,7 +158,7 @@ void Server::handleNewConnection()
 	if (fcntl(clientFd, F_SETFL, O_NONBLOCK) == -1)
 	{
 		close(clientFd);
-		std::cerr << "fcntl() failed on client" << std::cerr;
+		std::cerr << "fcntl() failed on client" << std::endl;
 		return;
 	}
 
