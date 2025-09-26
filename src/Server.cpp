@@ -1,30 +1,12 @@
 #include "Server.hpp"
-#include <iostream>		// for std::cout, std::cerr
-#include <cstdlib>		// for std::strtol
-#include <stdexcept>	// for std::runtime_error, std::invalid_argument
-#include <cstring>		// for std::memset, std::strerror, strncmp
-#include <cerrno>		// for errno, EINTR
-#include <unistd.h>		// for close, STDIN_FILENO
-#include <fcntl.h>		// for fcntl, O_NONBLOCK, F_SETFL
-#include <netinet/in.h> // for sockaddr_in, INADDR_ANY, htons
-#include <sys/socket.h> // for socket, setsockopt, bind, listen, accept, recv, send
-#include <arpa/inet.h>	// for getsockname
-
-
-
-
-// std::vector<std::string> split(const std::string &str, char delimiter)
-// {
-// 	std::vector<std::string> tokens;
-// 	std::string token;
-// 	std::istringstream tokenStream(str);
-
-// 	while (std::getline(tokenStream, token, delimiter))
-// 	{
-// 		tokens.push_back(token);
-// 	}
-// 	return tokens;
-// }
+#include "Channel.hpp"
+#include <iostream>			// for std::cout, std::cerr
+#include <stdexcept>		// for std::runtime_error, std::invalid_argument
+#include <cstring>			// for std::memset, std::strerror, strncmp
+#include <cerrno>			// for errno, EINTR
+#include <fcntl.h>			// for fcntl, O_NONBLOCK, F_SETFL
+#include <netinet/in.h> 	// for sockaddr_in, INADDR_ANY, htons
+#include <arpa/inet.h>		// for getsockname
 
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -39,8 +21,8 @@
 // create the listening socket
 void Server::createSocket()
 {
-	_listenFd = socket(AF_INET, SOCK_STREAM, 0);
-	printf("Socket FD: %d\n", _listenFd);
+	_listenFd = socket(AF_INET, SOCK_STREAM, 0);			// AF_INET - IPv4, SOCK_STREAM - TCP, 0 - default
+	std::cout << "Socket FD: " << _listenFd << std::endl;
 	if (_listenFd == -1)
 		throw std::runtime_error("socket() failed");
 }
@@ -49,12 +31,12 @@ void Server::createSocket()
 void Server::setNonBlocking(int fd)
 {
 	// load existing file descriptor flags
-	int flags = fcntl(fd, F_GETFL, 0);
+	int flags = fcntl(fd, F_GETFL, 0);						// F_GETFL - get file descriptor flags
 	if (flags == -1)
 		throw std::runtime_error("fcntl(F_GETFL) failed");
 
 	// set non-blocking mode flag
-	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)		// F_SETFL - set file descriptor flags
 		throw std::runtime_error("fcntl(F_SETFL) failed");
 }
 
@@ -62,6 +44,7 @@ void Server::setNonBlocking(int fd)
 void Server::setSocketOptions()
 {
 	int opt = 1;
+	// SOL_SOCKET - socket level, SO_REUSEADDR - allow reuse of local addresses
 	if (setsockopt(_listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
 		throw std::runtime_error("setsockopt() failed");
 }
@@ -87,7 +70,7 @@ void Server::bindSocket()
 	if (getsockname(_listenFd, (struct sockaddr *)&addr, &addrlen) == -1)
 		throw std::runtime_error("getsockname() failed");
 
-	int actual_port = ntohs(addr.sin_port);
+	int actual_port = ntohs(addr.sin_port);									// convert port number from network byte order to host byte order
 	std::cout << "Using specified port: " << actual_port << std::endl;
 	_port = actual_port;
 }
@@ -121,27 +104,6 @@ void Server::setupSocket()
 	startListening();
 }
 
-// void Server::addClient(IRCClient *client, int clientFd)
-// {
-// 	if (client)
-// 	{
-// 		_clients.push_back(client);
-// 		// client.fd = clientFd;
-// 	}
-// }
-
-IRCClient* Server::findClientByFd(int clientFd)
-{
-    for (size_t i = 0; i < _clients.size(); ++i)
-    {
-        if (_clients[i]->getFd() == clientFd)
-        {
-            return _clients[i];
-        }
-    }
-    return NULL;
-}
-
 // handle new connection
 void Server::handleNewConnection()
 {
@@ -162,6 +124,10 @@ void Server::handleNewConnection()
 		return;
 	}
 
+	// add client to list
+	Client* newClient = new Client(clientFd, inet_ntoa(clientAddr.sin_addr));
+    _clients.push_back(newClient);
+
 	// add client to poll
 	struct pollfd pfd;
 	pfd.fd = clientFd;
@@ -169,7 +135,7 @@ void Server::handleNewConnection()
 	_pfds.push_back(pfd);
 
 	std::cout << "New client connected (fd=" << clientFd << ")" << std::endl;
-	//addClient(new IRCClient(clientFd, inet_ntoa(clientAddr.sin_addr)), clientFd);
+	addClient(new Client(clientFd, inet_ntoa(clientAddr.sin_addr)), clientFd);
 
 }
 
@@ -188,6 +154,87 @@ void Server::handleStdinInput()
 			_running = false;
 		}
 	}
+}
+
+// handle join command
+void Server::handleJoinCommand(int clientFd, const std::string &message) {
+	Client* client = findClientByFd(clientFd);
+	if (!client) return;
+
+	std::vector<std::string> tokens = ft_split(message, ' ');
+	if (tokens.size() < 2) {
+		std::string response = ":server 461 JOIN :Not enough parameters\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::string channelName = tokens[1];
+	if (channelName[0] != '#') {
+		std::string response = ":server 479 " + client->getNickname() + " " + channelName + " :Invalid channel name\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	// static map of channels
+	static std::map<std::string, Channel*> channels;
+
+	Channel* channel;
+	if (channels.find(channelName) == channels.end()) {
+		channel = new Channel(channelName);
+		channels[channelName] = channel;
+	} else {
+		channel = channels[channelName];
+	}
+
+	// add client to channel
+	channel->addMember(client);
+
+	// send join message to channel
+	std::string joinMsg = client->getPrefix() + " JOIN " + channelName + "\r\n";
+	channel->broadcast(joinMsg);
+
+	// send names list to client in channel and end of list
+	std::string names;
+	for (std::map<int, Client*>::iterator it = channel->members.begin(); it != channel->members.end(); ++it) {
+		if (!names.empty()) names += " ";
+		names += it->second->getNickname();
+	}
+
+	std::string namesReply = ":server 353 " + client->getNickname() + " = " + channelName + " :" + names + "\r\n";
+	std::string endNames   = ":server 366 " + client->getNickname() + " " + channelName + " :End of /NAMES list.\r\n";
+
+	send(clientFd, namesReply.c_str(), namesReply.length(), 0);
+	send(clientFd, endNames.c_str(), endNames.length(), 0);
+}
+
+// handle message command
+void Server::handleChannelMessage(int clientFd, const std::string &channelName, const std::string &msgContent) {
+    static std::map<std::string, Channel*> channels; // ta sama mapa co w handleJoinCommand
+
+    Client* sender = findClientByFd(clientFd);
+    if (!sender) return;
+
+    // check if channel exists
+    if (channels.find(channelName) == channels.end()) {
+        std::string response = ":server 403 " + sender->getNickname() + " " + channelName + " :No such channel\r\n";
+        send(clientFd, response.c_str(), response.length(), 0);
+        return;
+    }
+
+    Channel* channel = channels[channelName];
+
+    // check if client is in channel
+    if (channel->members.find(clientFd) == channel->members.end()) {
+        std::string response = ":server 442 " + sender->getNickname() + " " + channelName + " :You're not on that channel\r\n";
+        send(clientFd, response.c_str(), response.length(), 0);
+        return;
+    }
+
+    // create full message (PRIVMSG)
+    std::string fullMessage = sender->getPrefix() + " PRIVMSG " + channelName + " :" + msgContent + "\r\n";
+
+    // send to all clients in channel except sender
+    channel->broadcast(fullMessage, sender);
 }
 
 // Main event loop. As long as the server is running, this loop controls network traffic.
@@ -222,6 +269,197 @@ void Server::eventLoop()
 	}
 }
 
+// handle kick command
+void Server::handleKickCommand(int clientFd, const std::string &message)
+{
+	(void)message;
+	// TODO: Implement kick command
+	std::string response = ":server 461 KICK :Not implemented yet\r\n";
+	send(clientFd, response.c_str(), response.length(), 0);
+}
+
+// handle invite command
+void Server::handleInviteCommand(int clientFd, const std::string &message)
+{
+	(void)message;
+	// TODO: Implement invite command
+	std::string response = ":server 461 INVITE :Not implemented yet\r\n";
+	send(clientFd, response.c_str(), response.length(), 0);
+}
+
+// handle topic command
+void Server::handleTopicCommand(int clientFd, const std::string &message)
+{
+	(void)message;
+	// TODO: Implement topic command
+	std::string response = ":server 461 TOPIC :Not implemented yet\r\n";
+	send(clientFd, response.c_str(), response.length(), 0);
+}
+
+// add client
+void Server::addClient(Client *client, int clientFd)
+{
+	(void)clientFd;
+	if (client)
+	{
+		_clients.push_back(client);
+		std::cout << "Client added to list (total: " << _clients.size() << ")" << std::endl;
+	}
+}
+
+// handle nick command
+void Server::handleNickCommand(int clientFd, const std::string &message)
+{
+	Client* client = findClientByFd(clientFd);
+	if (!client)
+		return;
+
+	std::vector<std::string> tokens = ft_split(message, ' ');
+	if (tokens.size() < 2)
+	{
+		std::string response = ":server 431 :No nickname given\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::string newNick = tokens[1];
+	
+	// check if nickname is already in use
+	for (size_t i = 0; i < _clients.size(); ++i)
+	{
+		if (_clients[i]->getFd() != clientFd && _clients[i]->getNickname() == newNick)
+		{
+			std::string response = ":server 433 " + newNick + " :Nickname is already in use\r\n";
+			send(clientFd, response.c_str(), response.length(), 0);
+			return;
+		}
+	}
+
+	client->setNickname(newNick);
+	std::cout << "Client " << clientFd << " set nickname to: " << newNick << std::endl;
+
+	// check if registration should be completed
+	if (!client->isRegistered())
+	{
+		completeRegistration(client);
+	}
+}
+
+// handle user command
+void Server::handleUserCommand(int clientFd, const std::string &message)
+{
+	Client* client = findClientByFd(clientFd);
+	if (!client)
+		return;
+
+	std::vector<std::string> tokens = ft_split(message, ' ');
+	if (tokens.size() < 5)
+	{
+		std::string response = ":server 461 USER :Not enough parameters\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	client->setUsername(tokens[1]);
+	client->setRealname(message.substr(message.find(tokens[4])));
+	std::cout << "Client " << clientFd << " set username to: " << tokens[1] << std::endl;
+
+	// check if registration should be completed
+	if (!client->isRegistered())
+	{
+		completeRegistration(client);
+	}
+}
+
+// handle password command
+void Server::handlePassCommand(int clientFd, const std::string &message)
+{
+	Client* client = findClientByFd(clientFd);
+	if (!client)
+		return;
+
+	std::vector<std::string> tokens = ft_split(message, ' ');
+	if (tokens.size() < 2)
+	{
+		std::string response = ":server 461 PASS :Not enough parameters\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::string providedPassword = tokens[1];
+	if (providedPassword == _password)
+	{
+		client->setPasswordVerified(true);
+		std::cout << "Client " << clientFd << " provided correct password" << std::endl;
+	}
+	else
+	{
+		std::string response = ":server 464 :Password incorrect\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		close(clientFd);
+		// Usuń klienta z listy
+		for (size_t i = 0; i < _clients.size(); ++i)
+		{
+			if (_clients[i]->getFd() == clientFd)
+			{
+				delete _clients[i];
+				_clients.erase(_clients.begin() + i);
+				break;
+			}
+		}
+	}
+}
+
+// complete registration
+void Server::completeRegistration(Client *client)
+{
+	if (client && 
+		client->isPasswordVerified() && 
+		!client->getNickname().empty() && 
+		!client->getUsername().empty())
+	{
+		client->setRegistered(true);
+		
+		// send welcome message
+		std::string welcome = ":server 001 " + client->getNickname()
+			+ " :Welcome to the Internet Relay Network "
+			+ client->getNickname() + "!" + client->getUsername() + "@" 
+			+ client->getPrefix().substr(client->getPrefix().find('@') + 1) + "\r\n";
+		client->sendMessage(welcome);
+		
+		std::cout << "Client " << client->getFd() << " (" << client->getNickname()
+				<< ") successfully registered" << std::endl;
+	}
+}
+
+// find client by fd
+Client* Server::findClientByFd(int clientFd)
+{
+	for (size_t i = 0; i < _clients.size(); ++i)
+	{
+		if (_clients[i]->getFd() == clientFd)
+		{
+			return _clients[i];
+		}
+	}
+	return NULL;
+}
+
+
+// split string
+std::vector<std::string> Server::ft_split(const std::string &str, char delimiter)
+{
+	std::vector<std::string> tokens;
+	std::string token;
+	std::istringstream tokenStream(str);
+
+	while (std::getline(tokenStream, token, delimiter)) {
+		if (!token.empty())
+			tokens.push_back(token);
+	}
+	return tokens;
+}
+
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // 															PUBLIC:
@@ -242,11 +480,20 @@ Server::Server(int port, const std::string &password)
 //		_pfds[0] = _listenFd (we don't need to close it separately)
 Server::~Server()
 {
+	// close all sockets (file descriptors)
 	for (size_t i = 0; i < _pfds.size(); ++i)
 	{
 		if (_pfds[i].fd != -1)
 			close(_pfds[i].fd);
 	}
+
+	// delete all clients
+	for (size_t i = 0; i < _clients.size(); ++i) {
+        delete _clients[i];
+    }
+    _clients.clear();
+    
+    _pfds.clear();
 }
 
 // ====================================================================
@@ -311,3 +558,39 @@ int Server::parseServerArguments(int argc, char **argv, std::string &password)
 	password = argv[2];
 	return static_cast<int>(port);
 }
+
+// stop server
+void Server::stop()
+{
+	_running = false;
+	
+	// close all clients
+	for (size_t i = 0; i < _clients.size(); ++i)
+	{
+		if (_clients[i])
+		{
+			close(_clients[i]->getFd());
+			delete _clients[i];
+		}
+	}
+	_clients.clear();
+	
+	// close listening socket
+	if (_listenFd != -1)
+	{
+		close(_listenFd);
+		_listenFd = -1;
+	}
+	
+	// clear pollfd vector (file descriptors)
+	_pfds.clear();
+}
+
+// set port to the port given by user
+void Server::setPortNumber(int p)
+{
+	if (p < 1 || p > 65535)
+		throw std::invalid_argument("Port must be between 1 and 65535");
+	_port = p;
+}
+

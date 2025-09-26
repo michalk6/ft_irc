@@ -1,6 +1,7 @@
-
 #include "Server.hpp"
-#include "IRCClient.hpp"
+#include "Client.hpp"
+#include <iostream>
+#include <ostream>
 
 // void Server::handleTopicCommand(int clientFd, const std::string &message)
 // {
@@ -14,10 +15,9 @@
 // void Server::handleChannelMessage(int clientFd, const std::string &target, const std::string &msgContent)
 
 
-void Server::handelePrivateMessage(int clientFd, const std::string &target, const std::string &msgContent)
-{
+void Server::handelePrivateMessage(int clientFd, const std::string &target, const std::string &msgContent) {
 	// Find the target client by nickname
-	IRCClient* targetClient = NULL;
+	Client* targetClient = NULL;
 	for (size_t i = 0; i < _clients.size(); ++i)
 	{
 		if (_clients[i]->getNickname() == target)
@@ -45,8 +45,7 @@ void Server::handelePrivateMessage(int clientFd, const std::string &target, cons
 	targetClient->sendMessage(fullMessage);
 }
 
-std::vector<std::string> split(const std::string &str, char delimiter)
-{
+std::vector<std::string> split(const std::string &str, char delimiter) {
 	std::vector<std::string> tokens;
 	std::string token;
 	std::istringstream tokenStream(str);
@@ -58,8 +57,7 @@ std::vector<std::string> split(const std::string &str, char delimiter)
 	return tokens;
 }
 
-void Server::handleMsgCommand(int clientFd, const std::string &message)
-{
+void Server::handleMsgCommand(int clientFd, const std::string &message) {
 	std::vector<std::string> tokens = split(message, ' ');
 	if (tokens.size() < 3)
 	{
@@ -88,8 +86,7 @@ void Server::handleMsgCommand(int clientFd, const std::string &message)
 }
 
 
-void Server::handleModeCommand(int clientFd, const std::string &message)
-{
+void Server::handleModeCommand(int clientFd, const std::string &message) {
 	std::vector<std::string> tokens = split(message, ' ');
 	if (tokens.size() < 2)
 	{
@@ -111,8 +108,7 @@ void Server::handleModeCommand(int clientFd, const std::string &message)
 	}
 }
 
-void Server::handleClientEvent(int i)
-{
+void Server::handleClientEvent(int i) {
 	char buf[512];
 	int clientFd = _pfds[i].fd;
 	int bytes = recv(clientFd, buf, sizeof(buf) - 1, 0);
@@ -123,7 +119,13 @@ void Server::handleClientEvent(int i)
 			std::cout << "Client disconnected (fd=" << clientFd << ")" << std::endl;
 		else
 			std::cerr << "recv() error on fd " << clientFd << std::endl;
-
+		for (size_t j = 0; j < _clients.size(); ++j) {
+			if (_clients[j]->getFd() == clientFd) {
+				delete _clients[j];  // ZWOLNIJ PAMIĘĆ
+				_clients.erase(_clients.begin() + j);
+				break;
+			}
+		}
 		close(clientFd);
 		_pfds.erase(_pfds.begin() + i);
 		return;
@@ -132,29 +134,33 @@ void Server::handleClientEvent(int i)
 	buf[bytes] = '\0';
 	std::string message(buf);
 
-	if (message.find("KICK") == 0)
-	{
-		// handleKickCommand(clientFd, message);
-	}
-	else if (message.find("INVITE") == 0)
-	{
-		// handleInviteCommand(clientFd, message);
-	}
-	else if (message.find("TOPIC") == 0)
-	{
-		// handleTopicCommand(clientFd, message);
-	}
-	else if (message.find("MODE") == 0)
-	{
-		handleModeCommand(clientFd, message);
-	}
-	else if (message.find("MSG") == 0)
-	{
-		handleMsgCommand(clientFd, message);
-	}
-	else
-	{
-		std::string response = ":server 421 " + message.substr(0, message.find(' ')) + " :Unknown command\r\n";
-		send(clientFd, response.c_str(), response.length(), 0);
+	Client* client = findClientByFd(clientFd);
+	if (client) {
+		client->appendBuffer(message);
+		
+		while (client->hasCompleteCommand()) {
+			std::string command = client->extractCommand();
+			
+			if (command.find("PASS") == 0) {
+				handlePassCommand(clientFd, command);
+			} else if (command.find("NICK") == 0) {
+				handleNickCommand(clientFd, command);
+			} else if (command.find("USER") == 0) {
+				handleUserCommand(clientFd, command);
+			} else if (command.find("QUIT") == 0) {
+			} else {
+				// only registered clients can send commands
+				if (client->isRegistered()) {
+				if (command.find("JOIN") == 0) {
+					handleJoinCommand(clientFd, command);
+				} else if (command.find("PRIVMSG") == 0) {
+					handleMsgCommand(clientFd, command);
+				} else {
+					std::string response = ":server 421 " + command + " :Unknown command\r\n";
+					send(clientFd, response.c_str(), response.length(), 0);
+					}
+				}
+			}
+		}
 	}
 }
