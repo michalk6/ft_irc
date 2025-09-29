@@ -1,29 +1,13 @@
+// Channel.cpp - zaktualizuj:
 #include "Channel.hpp"
 #include "Client.hpp"
+#include <algorithm>
 
-// |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-// |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-// 															PUBLIC:
-// |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-// |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-
-// ====================================================================
-// Orthodox Canonical Form elements:
-// ====================================================================
-
-// constructor:
 Channel::Channel(const std::string &channelName)
-	: name(channelName) {}
+	: name(channelName), topic(""), userLimit(-1) {}
 
-
-// destructor:
 Channel::~Channel() {}
 
-// ====================================================================
-// methods:
-// ====================================================================
-
-// broadcasts a message to all channel members except the specified excluded client
 void Channel::broadcast(const std::string &message, Client *exclude) const
 {
 	for (std::map<int, Client *>::const_iterator it = members.begin(); it != members.end(); ++it)
@@ -35,26 +19,92 @@ void Channel::broadcast(const std::string &message, Client *exclude) const
 	}
 }
 
-// check if the client with the given file descriptor is a channel operator
 bool Channel::isOperator(int clientFd) const
 {
-	return operators.count(clientFd) > 0;
+	return operators.find(clientFd) != operators.end();
 }
 
-// add a client to the channel and automatically promotes the first member to operator if the channel has no operators
 void Channel::addMember(Client *client)
 {
-	if (!client) return;
+	if (!client)
+		return;
 	members[client->getFd()] = client;
-	if (operators.empty())
+	client->addChannel(name);
+
+	// First member becomes operator
+	if (members.size() == 1)
 	{
-		operators.insert(client->getFd());
+		addOperator(client->getFd());
 	}
 }
 
-// remove a client from both members and operators lists of the channel
 void Channel::removeMember(int clientFd)
 {
+	Client *client = members[clientFd];
+	if (client)
+	{
+		client->removeChannel(name);
+	}
 	members.erase(clientFd);
 	operators.erase(clientFd);
+}
+
+void Channel::addOperator(int clientFd)
+{
+	operators.insert(clientFd);
+}
+
+void Channel::removeOperator(int clientFd)
+{
+	operators.erase(clientFd);
+}
+
+bool Channel::hasMember(int clientFd) const
+{
+	return members.find(clientFd) != members.end();
+}
+
+std::vector<std::string> Channel::getMemberNicknames() const
+{
+	std::vector<std::string> nicknames;
+	for (std::map<int, Client *>::const_iterator it = members.begin(); it != members.end(); ++it)
+	{
+		nicknames.push_back(it->second->getNickname());
+	}
+	return nicknames;
+}
+
+size_t Channel::getMemberCount() const
+{
+	return members.size();
+}
+
+void Channel::setTopic(const std::string &newTopic)
+{
+	topic = newTopic;
+}
+
+const std::string &Channel::getTopic() const
+{
+	return topic;
+}
+
+void Channel::setMode(char mode)
+{
+	modes.insert(mode);
+}
+
+void Channel::unsetMode(char mode)
+{
+	modes.erase(mode);
+}
+
+bool Channel::hasMode(char mode) const
+{
+	return modes.find(mode) != modes.end();
+}
+
+bool Client::isInChannel(const std::string &channelName) const
+{
+	return _channels.find(channelName) != _channels.end();
 }

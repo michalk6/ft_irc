@@ -64,7 +64,7 @@ void Client::sendMessage(const std::string &message) const {
 	send(_fd, formatted.c_str(), formatted.length(), 0);
 }
 
-// -------------------------------------------------------registration
+// -------------------------------------------------------registration 
 
 // check if password is verified
 bool Client::isPasswordVerified() const {
@@ -84,4 +84,22 @@ void Client::setRealname(const std::string& realname) {
 // get realname
 const std::string& Client::getRealname() const {
 	return _realname;
+}
+
+void Client::addChannel(const std::string& channelName) {
+    _channels.insert(channelName);
+}
+
+// remove channel from client's channel list
+void Client::removeChannel(const std::string& channelName) {
+    _channels.erase(channelName);
+}
+
+// get client's channels
+const std::set<std::string>& Client::getChannels() const {
+    return _channels;
+}
+
+const std::string& Client::getHostname() const {
+    return _hostname;
 }

@@ -9,6 +9,8 @@
 #include <poll.h>			// for poll, pollfd, POLLIN
 #include <sys/socket.h> 	// for socket, setsockopt, bind, listen, accept, recv, send
 #include <sstream>			// for std::stringstream
+#include <map>
+#include "ChannelMenager.hpp"
 
 class Server {
 
@@ -20,6 +22,8 @@ class Server {
 		std::vector<pollfd>		_pfds;						// poll file descriptors (list of all sockets we want to monitor using poll())
 		bool					_running;					// flag to check if server is running
 		std::vector<Client*>	_clients;					// list of connected clients
+		std::vector<std::string>	_channels;				// list of channels
+		ChannelManager _channelManager;
 
 		void createSocket();								// create the listening socket
 		void setNonBlocking(int fd);						// set socket to non-blocking mode
@@ -48,6 +52,9 @@ class Server {
 		void completeRegistration(Client *client);
 		Client* findClientByFd(int clientFd);									// find client by fd
 		std::vector<std::string> ft_split(const std::string &str, char delimiter);	// split string
+		void joindefaultChannel(int clientFd);
+		void handlePartCommand(int clientFd, const std::string &message);
+		void handleWhoCommand(int clientFd, const std::string &message);
 		
 		/* 	
 			Socket is a system resource that cannot be safely copied.

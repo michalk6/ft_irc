@@ -1,12 +1,12 @@
 #include "Server.hpp"
 #include "Channel.hpp"
-#include <iostream>			// for std::cout, std::cerr
-#include <stdexcept>		// for std::runtime_error, std::invalid_argument
-#include <cstring>			// for std::memset, std::strerror, strncmp
-#include <cerrno>			// for errno, EINTR
-#include <fcntl.h>			// for fcntl, O_NONBLOCK, F_SETFL
-#include <netinet/in.h> 	// for sockaddr_in, INADDR_ANY, htons
-#include <arpa/inet.h>		// for getsockname
+#include <iostream>		// for std::cout, std::cerr
+#include <stdexcept>	// for std::runtime_error, std::invalid_argument
+#include <cstring>		// for std::memset, std::strerror, strncmp
+#include <cerrno>		// for errno, EINTR
+#include <fcntl.h>		// for fcntl, O_NONBLOCK, F_SETFL
+#include <netinet/in.h> // for sockaddr_in, INADDR_ANY, htons
+#include <arpa/inet.h>	// for getsockname
 
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -21,7 +21,7 @@
 // create the listening socket
 void Server::createSocket()
 {
-	_listenFd = socket(AF_INET, SOCK_STREAM, 0);			// AF_INET - IPv4, SOCK_STREAM - TCP, 0 - default
+	_listenFd = socket(AF_INET, SOCK_STREAM, 0); // AF_INET - IPv4, SOCK_STREAM - TCP, 0 - default
 	std::cout << "Socket FD: " << _listenFd << std::endl;
 	if (_listenFd == -1)
 		throw std::runtime_error("socket() failed");
@@ -31,12 +31,12 @@ void Server::createSocket()
 void Server::setNonBlocking(int fd)
 {
 	// load existing file descriptor flags
-	int flags = fcntl(fd, F_GETFL, 0);						// F_GETFL - get file descriptor flags
+	int flags = fcntl(fd, F_GETFL, 0); // F_GETFL - get file descriptor flags
 	if (flags == -1)
 		throw std::runtime_error("fcntl(F_GETFL) failed");
 
 	// set non-blocking mode flag
-	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)		// F_SETFL - set file descriptor flags
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) // F_SETFL - set file descriptor flags
 		throw std::runtime_error("fcntl(F_SETFL) failed");
 }
 
@@ -70,7 +70,7 @@ void Server::bindSocket()
 	if (getsockname(_listenFd, (struct sockaddr *)&addr, &addrlen) == -1)
 		throw std::runtime_error("getsockname() failed");
 
-	int actual_port = ntohs(addr.sin_port);									// convert port number from network byte order to host byte order
+	int actual_port = ntohs(addr.sin_port); // convert port number from network byte order to host byte order
 	std::cout << "Using specified port: " << actual_port << std::endl;
 	_port = actual_port;
 }
@@ -94,7 +94,6 @@ void Server::startListening()
 	std::cout << "Socket setup complete on port " << _port << std::endl;
 }
 
-// configure the listening socket
 void Server::setupSocket()
 {
 	createSocket();
@@ -104,7 +103,6 @@ void Server::setupSocket()
 	startListening();
 }
 
-// handle new connection
 void Server::handleNewConnection()
 {
 	struct sockaddr_in clientAddr;
@@ -115,20 +113,14 @@ void Server::handleNewConnection()
 		std::cerr << "accept() failed" << std::endl;
 		return;
 	}
-
-	// non-blocking
 	if (fcntl(clientFd, F_SETFL, O_NONBLOCK) == -1)
 	{
 		close(clientFd);
 		std::cerr << "fcntl() failed on client" << std::endl;
 		return;
 	}
-
-	// add client to list
-	Client* newClient = new Client(clientFd, inet_ntoa(clientAddr.sin_addr));
-    _clients.push_back(newClient);
-
-	// add client to poll
+	Client *newClient = new Client(clientFd, inet_ntoa(clientAddr.sin_addr));
+	_clients.push_back(newClient);
 	struct pollfd pfd;
 	pfd.fd = clientFd;
 	pfd.events = POLLIN;
@@ -136,10 +128,8 @@ void Server::handleNewConnection()
 
 	std::cout << "New client connected (fd=" << clientFd << ")" << std::endl;
 	addClient(new Client(clientFd, inet_ntoa(clientAddr.sin_addr)), clientFd);
-
 }
 
-// handle input from stdin (quit command)
 void Server::handleStdinInput()
 {
 	char buf[16];
@@ -155,86 +145,139 @@ void Server::handleStdinInput()
 		}
 	}
 }
-
-// handle join command
-void Server::handleJoinCommand(int clientFd, const std::string &message) {
-	Client* client = findClientByFd(clientFd);
-	if (!client) return;
-
+void Server::handleWhoCommand(int clientFd, const std::string &message)
+{
 	std::vector<std::string> tokens = ft_split(message, ' ');
 	if (tokens.size() < 2) {
-		std::string response = ":server 461 JOIN :Not enough parameters\r\n";
+		std::string response = ":server 461 WHO :Not enough parameters\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	std::string channelName = tokens[1];
+	Channel* channel = _channelManager.getChannel(channelName);
+	if (!channel) {
+		std::string response = ":server 403 " + channelName + " :No such channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	for (std::map<int, Client*>::iterator it = channel->members.begin(); it != channel->members.end(); ++it) {
+		Client* member = it->second;
+		std::string reply = ":server 352 " + channelName + " " +
+			member->getUsername() + " " +
+			member->getHostname() + " server " +
+			member->getNickname() + " H :0 " +
+			member->getRealname() + "\r\n";
+		send(clientFd, reply.c_str(), reply.length(), 0);
+	}
+	// std::string endReply = ":server 315 " + channelName + " :End of WHO list\r\n";
+	// send(clientFd, endReply.c_str(), endReply.length(), 0);
+}
+
+void Server::handleJoinCommand(int clientFd, const std::string &message)
+{
+	Client *client = findClientByFd(clientFd);
+	if (!client || !client->isRegistered())
+	{
+		std::string response = "451 :You have not registered\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::vector<std::string> tokens = ft_split(message, ' ');
+	if (tokens.size() < 2)
+	{
+		std::string response = "461 JOIN :Not enough parameters\r\n";
 		send(clientFd, response.c_str(), response.length(), 0);
 		return;
 	}
 
 	std::string channelName = tokens[1];
-	if (channelName[0] != '#') {
-		std::string response = ":server 479 " + client->getNickname() + " " + channelName + " :Invalid channel name\r\n";
+	if (channelName[0] != '#' && channelName[0] != '&')
+	{
+		std::string response = "479 " + client->getNickname() + " " + channelName + " :Invalid channel name\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	Channel *channel;
+	if (!_channelManager.channelExists(channelName))
+	{
+		channel = _channelManager.createChannel(channelName);
+		std::cout << "Created new channel: " << channelName << std::endl;
+	}
+	else
+	{
+		channel = _channelManager.getChannel(channelName);
+		std::cout << "Found existing channel: " << channelName << std::endl;
+	}
+
+	if (channel->hasMember(clientFd))
+	{
+		std::cout << "Client already in channel" << std::endl;
+		return;
+	}
+	channel->addMember(client);
+	std::string joinMsg = client->getPrefix() + " JOIN " + channelName + "\r\n";
+	channel->broadcast(joinMsg);
+	if (!channel->getTopic().empty())
+	{
+		std::string topicMsg = "332 " + client->getNickname() + " " + channelName + " :" + channel->getTopic();
+		client->sendMessage(topicMsg);
+	}
+	else
+	{
+		std::string noTopicMsg = "331 " + client->getNickname() + " " + channelName + " :No topic is set\r\n";
+		send(clientFd, noTopicMsg.c_str(), noTopicMsg.length(), 0);
+	}
+	std::string names;
+	for (std::map<int, Client *>::iterator it = channel->members.begin(); it != channel->members.end(); ++it)
+	{
+		if (!names.empty())
+			names += " ";
+		if (channel->isOperator(it->first))
+		{
+			names += "@";
+		}
+		names += it->second->getNickname();
+	}
+	std::string namesReply = "353 " + client->getNickname() + " = " + channelName + " :" + names + "\r\n";
+	std::string endNames = "366 " + client->getNickname() + " " + channelName + " :End of /NAMES list\r\n";
+	send(clientFd, namesReply.c_str(), namesReply.length(), 0);
+	send(clientFd, endNames.c_str(), endNames.length(), 0);
+	std::cout << "Client " << client->getNickname() << " joined channel " << channelName << std::endl;
+	std::cout << "Channel " << channelName << " now has " << channel->getMemberCount() << " members" << std::endl;
+}
+// handle message command
+void Server::handleChannelMessage(int clientFd, const std::string &channelName, const std::string &msgContent)
+{
+	static std::map<std::string, Channel *> channels; // ta sama mapa co w handleJoinCommand
+
+	Client *sender = findClientByFd(clientFd);
+	if (!sender)
+		return;
+
+	// check if channel exists
+	if (channels.find(channelName) == channels.end())
+	{
+		std::string response = ":server 403 " + sender->getNickname() + " " + channelName + " :No such channel\r\n";
 		send(clientFd, response.c_str(), response.length(), 0);
 		return;
 	}
 
-	// static map of channels
-	static std::map<std::string, Channel*> channels;
+	Channel *channel = channels[channelName];
 
-	Channel* channel;
-	if (channels.find(channelName) == channels.end()) {
-		channel = new Channel(channelName);
-		channels[channelName] = channel;
-	} else {
-		channel = channels[channelName];
+	// check if client is in channel
+	if (channel->members.find(clientFd) == channel->members.end())
+	{
+		std::string response = ":server 442 " + sender->getNickname() + " " + channelName + " :You're not on that channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
 	}
 
-	// add client to channel
-	channel->addMember(client);
+	// create full message (PRIVMSG)
+	std::string fullMessage = sender->getPrefix() + " PRIVMSG " + channelName + " :" + msgContent + "\r\n";
 
-	// send join message to channel
-	std::string joinMsg = client->getPrefix() + " JOIN " + channelName + "\r\n";
-	channel->broadcast(joinMsg);
-
-	// send names list to client in channel and end of list
-	std::string names;
-	for (std::map<int, Client*>::iterator it = channel->members.begin(); it != channel->members.end(); ++it) {
-		if (!names.empty()) names += " ";
-		names += it->second->getNickname();
-	}
-
-	std::string namesReply = ":server 353 " + client->getNickname() + " = " + channelName + " :" + names + "\r\n";
-	std::string endNames   = ":server 366 " + client->getNickname() + " " + channelName + " :End of /NAMES list.\r\n";
-
-	send(clientFd, namesReply.c_str(), namesReply.length(), 0);
-	send(clientFd, endNames.c_str(), endNames.length(), 0);
-}
-
-// handle message command
-void Server::handleChannelMessage(int clientFd, const std::string &channelName, const std::string &msgContent) {
-    static std::map<std::string, Channel*> channels; // ta sama mapa co w handleJoinCommand
-
-    Client* sender = findClientByFd(clientFd);
-    if (!sender) return;
-
-    // check if channel exists
-    if (channels.find(channelName) == channels.end()) {
-        std::string response = ":server 403 " + sender->getNickname() + " " + channelName + " :No such channel\r\n";
-        send(clientFd, response.c_str(), response.length(), 0);
-        return;
-    }
-
-    Channel* channel = channels[channelName];
-
-    // check if client is in channel
-    if (channel->members.find(clientFd) == channel->members.end()) {
-        std::string response = ":server 442 " + sender->getNickname() + " " + channelName + " :You're not on that channel\r\n";
-        send(clientFd, response.c_str(), response.length(), 0);
-        return;
-    }
-
-    // create full message (PRIVMSG)
-    std::string fullMessage = sender->getPrefix() + " PRIVMSG " + channelName + " :" + msgContent + "\r\n";
-
-    // send to all clients in channel except sender
-    channel->broadcast(fullMessage, sender);
+	// send to all clients in channel except sender
+	channel->broadcast(fullMessage, sender);
 }
 
 // Main event loop. As long as the server is running, this loop controls network traffic.
@@ -310,7 +353,7 @@ void Server::addClient(Client *client, int clientFd)
 // handle nick command
 void Server::handleNickCommand(int clientFd, const std::string &message)
 {
-	Client* client = findClientByFd(clientFd);
+	Client *client = findClientByFd(clientFd);
 	if (!client)
 		return;
 
@@ -323,7 +366,7 @@ void Server::handleNickCommand(int clientFd, const std::string &message)
 	}
 
 	std::string newNick = tokens[1];
-	
+
 	// check if nickname is already in use
 	for (size_t i = 0; i < _clients.size(); ++i)
 	{
@@ -348,7 +391,7 @@ void Server::handleNickCommand(int clientFd, const std::string &message)
 // handle user command
 void Server::handleUserCommand(int clientFd, const std::string &message)
 {
-	Client* client = findClientByFd(clientFd);
+	Client *client = findClientByFd(clientFd);
 	if (!client)
 		return;
 
@@ -374,7 +417,7 @@ void Server::handleUserCommand(int clientFd, const std::string &message)
 // handle password command
 void Server::handlePassCommand(int clientFd, const std::string &message)
 {
-	Client* client = findClientByFd(clientFd);
+	Client *client = findClientByFd(clientFd);
 	if (!client)
 		return;
 
@@ -410,30 +453,30 @@ void Server::handlePassCommand(int clientFd, const std::string &message)
 	}
 }
 
-// complete registration
 void Server::completeRegistration(Client *client)
 {
-	if (client && 
-		client->isPasswordVerified() && 
-		!client->getNickname().empty() && 
+	if (client &&
+		client->isPasswordVerified() &&
+		!client->getNickname().empty() &&
 		!client->getUsername().empty())
 	{
 		client->setRegistered(true);
-		
-		// send welcome message
-		std::string welcome = ":server 001 " + client->getNickname()
-			+ " :Welcome to the Internet Relay Network "
-			+ client->getNickname() + "!" + client->getUsername() + "@" 
-			+ client->getPrefix().substr(client->getPrefix().find('@') + 1) + "\r\n";
+
+		// Send welcome message (without leading colon)
+		std::string welcome = "001 " + client->getNickname() + " :Welcome to the Internet Relay Network " + 
+					 client->getNickname() + "!" + client->getUsername() + "@" + client->getHostname() + "\r\n";
 		client->sendMessage(welcome);
-		
+
+		// Auto-join default channel after successful registration
+		//joindefaultChannel(client->getFd());
+
 		std::cout << "Client " << client->getFd() << " (" << client->getNickname()
-				<< ") successfully registered" << std::endl;
+				  << ") successfully registered" << std::endl;
 	}
 }
 
 // find client by fd
-Client* Server::findClientByFd(int clientFd)
+Client *Server::findClientByFd(int clientFd)
 {
 	for (size_t i = 0; i < _clients.size(); ++i)
 	{
@@ -445,7 +488,6 @@ Client* Server::findClientByFd(int clientFd)
 	return NULL;
 }
 
-
 // split string
 std::vector<std::string> Server::ft_split(const std::string &str, char delimiter)
 {
@@ -453,7 +495,8 @@ std::vector<std::string> Server::ft_split(const std::string &str, char delimiter
 	std::string token;
 	std::istringstream tokenStream(str);
 
-	while (std::getline(tokenStream, token, delimiter)) {
+	while (std::getline(tokenStream, token, delimiter))
+	{
 		if (!token.empty())
 			tokens.push_back(token);
 	}
@@ -488,12 +531,13 @@ Server::~Server()
 	}
 
 	// delete all clients
-	for (size_t i = 0; i < _clients.size(); ++i) {
-        delete _clients[i];
-    }
-    _clients.clear();
-    
-    _pfds.clear();
+	for (size_t i = 0; i < _clients.size(); ++i)
+	{
+		delete _clients[i];
+	}
+	_clients.clear();
+
+	_pfds.clear();
 }
 
 // ====================================================================
@@ -563,7 +607,7 @@ int Server::parseServerArguments(int argc, char **argv, std::string &password)
 void Server::stop()
 {
 	_running = false;
-	
+
 	// close all clients
 	for (size_t i = 0; i < _clients.size(); ++i)
 	{
@@ -574,14 +618,14 @@ void Server::stop()
 		}
 	}
 	_clients.clear();
-	
+
 	// close listening socket
 	if (_listenFd != -1)
 	{
 		close(_listenFd);
 		_listenFd = -1;
 	}
-	
+
 	// clear pollfd vector (file descriptors)
 	_pfds.clear();
 }
@@ -593,4 +637,3 @@ void Server::setPortNumber(int p)
 		throw std::invalid_argument("Port must be between 1 and 65535");
 	_port = p;
 }
-

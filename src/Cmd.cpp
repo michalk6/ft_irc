@@ -2,7 +2,8 @@
 #include "Client.hpp"
 #include <iostream>
 #include <ostream>
-
+#include "Channel.hpp"
+#include "ChannelMenager.hpp"
 // void Server::handleTopicCommand(int clientFd, const std::string &message)
 // {
 // }
@@ -11,13 +12,12 @@
 
 // 	void Server::handleKickCommand(int clientFd, const std::string &message)
 
-
 // void Server::handleChannelMessage(int clientFd, const std::string &target, const std::string &msgContent)
 
-
-void Server::handelePrivateMessage(int clientFd, const std::string &target, const std::string &msgContent) {
+void Server::handelePrivateMessage(int clientFd, const std::string &target, const std::string &msgContent)
+{
 	// Find the target client by nickname
-	Client* targetClient = NULL;
+	Client *targetClient = NULL;
 	for (size_t i = 0; i < _clients.size(); ++i)
 	{
 		if (_clients[i]->getNickname() == target)
@@ -45,7 +45,8 @@ void Server::handelePrivateMessage(int clientFd, const std::string &target, cons
 	targetClient->sendMessage(fullMessage);
 }
 
-std::vector<std::string> split(const std::string &str, char delimiter) {
+std::vector<std::string> split(const std::string &str, char delimiter)
+{
 	std::vector<std::string> tokens;
 	std::string token;
 	std::istringstream tokenStream(str);
@@ -57,7 +58,8 @@ std::vector<std::string> split(const std::string &str, char delimiter) {
 	return tokens;
 }
 
-void Server::handleMsgCommand(int clientFd, const std::string &message) {
+void Server::handleMsgCommand(int clientFd, const std::string &message)
+{
 	std::vector<std::string> tokens = split(message, ' ');
 	if (tokens.size() < 3)
 	{
@@ -85,8 +87,56 @@ void Server::handleMsgCommand(int clientFd, const std::string &message) {
 	}
 }
 
+void Server::handlePartCommand(int clientFd, const std::string &message)
+{
+	Client *client = findClientByFd(clientFd);
+	if (!client || !client->isRegistered())
+		return;
 
-void Server::handleModeCommand(int clientFd, const std::string &message) {
+	std::vector<std::string> tokens = ft_split(message, ' ');
+	if (tokens.size() < 2)
+	{
+		std::string response = ":server 461 PART :Not enough parameters\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::string channelName = tokens[1];
+	std::string partMessage = (tokens.size() > 2) ? message.substr(message.find(channelName) + channelName.length() + 1) : client->getNickname();
+
+	Channel *channel = _channelManager.getChannel(channelName);
+	if (!channel)
+	{
+		std::string response = ":server 403 " + client->getNickname() + " " + channelName + " :No such channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	if (!channel->hasMember(clientFd))
+	{
+		std::string response = ":server 442 " + client->getNickname() + " " + channelName + " :You're not on that channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	// Send PART message to channel
+	std::string partMsg = client->getPrefix() + " PART " + channelName + " :" + partMessage + "\r\n";
+	channel->broadcast(partMsg);
+
+	// Remove client from channel
+	channel->removeMember(clientFd);
+
+	// Remove channel if empty
+	if (channel->getMemberCount() == 0)
+	{
+		_channelManager.removeChannel(channelName);
+	}
+
+	std::cout << "Client " << client->getNickname() << " left channel " << channelName << std::endl;
+}
+
+void Server::handleModeCommand(int clientFd, const std::string &message)
+{
 	std::vector<std::string> tokens = split(message, ' ');
 	if (tokens.size() < 2)
 	{
@@ -108,7 +158,23 @@ void Server::handleModeCommand(int clientFd, const std::string &message) {
 	}
 }
 
-void Server::handleClientEvent(int i) {
+void Server::joindefaultChannel(int clientFd)
+{
+	const std::string defaultChannel = "#general";
+	Client *client = findClientByFd(clientFd);
+	if (!client)
+		return;
+	if (!client->isInChannel(defaultChannel))
+	{
+		if (client->isRegistered())
+		{
+			handleJoinCommand(clientFd, "JOIN " + defaultChannel);
+		}
+	}
+}
+
+void Server::handleClientEvent(int i)// to do chenachne parsing after reciving message and change else if to switch case
+{
 	char buf[512];
 	int clientFd = _pfds[i].fd;
 	int bytes = recv(clientFd, buf, sizeof(buf) - 1, 0);
@@ -119,9 +185,14 @@ void Server::handleClientEvent(int i) {
 			std::cout << "Client disconnected (fd=" << clientFd << ")" << std::endl;
 		else
 			std::cerr << "recv() error on fd " << clientFd << std::endl;
-		for (size_t j = 0; j < _clients.size(); ++j) {
-			if (_clients[j]->getFd() == clientFd) {
-				delete _clients[j];  // ZWOLNIJ PAMIĘĆ
+
+		_channelManager.removeClientFromAllChannels(clientFd); // Comment out for now
+
+		for (size_t j = 0; j < _clients.size(); ++j)
+		{
+			if (_clients[j]->getFd() == clientFd)
+			{
+				delete _clients[j];
 				_clients.erase(_clients.begin() + j);
 				break;
 			}
@@ -130,35 +201,82 @@ void Server::handleClientEvent(int i) {
 		_pfds.erase(_pfds.begin() + i);
 		return;
 	}
-
 	buf[bytes] = '\0';
 	std::string message(buf);
-
-	Client* client = findClientByFd(clientFd);
-	if (client) {
+	Client *client = findClientByFd(clientFd);
+	if (client)
+	{
 		client->appendBuffer(message);
-		
-		while (client->hasCompleteCommand()) {
+		while (client->hasCompleteCommand())
+		{
 			std::string command = client->extractCommand();
-			
-			if (command.find("PASS") == 0) {
+			std::string trimmed = command;
+			trimmed.erase(0, trimmed.find_first_not_of(" \t\r\n"));
+			trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
+			if (trimmed.empty())
+				continue;
+			std::cout << "Received command from " << client->getNickname() << ": " << command << std::endl;
+
+			if (command.find("PASS") == 0)
+
 				handlePassCommand(clientFd, command);
-			} else if (command.find("NICK") == 0) {
+			else if (command.find("NICK") == 0)
 				handleNickCommand(clientFd, command);
-			} else if (command.find("USER") == 0) {
+			else if (command.find("USER") == 0)
 				handleUserCommand(clientFd, command);
-			} else if (command.find("QUIT") == 0) {
-			} else {
-				// only registered clients can send commands
-				if (client->isRegistered()) {
-				if (command.find("JOIN") == 0) {
-					handleJoinCommand(clientFd, command);
-				} else if (command.find("PRIVMSG") == 0) {
-					handleMsgCommand(clientFd, command);
-				} else {
-					std::string response = ":server 421 " + command + " :Unknown command\r\n";
-					send(clientFd, response.c_str(), response.length(), 0);
+			else if (command.find("QUIT") == 0)
+			{
+				// Handle QUIT
+			}
+			else if (command.find("WHO") == 0)
+				handleWhoCommand(clientFd, command);
+			else if (command.find("CAP LS 302") == 0)
+			{
+				std::cout << "Handling LS command" << std::endl;
+				std::string capMessage = ":server : CAP * LS :multi-prefix away-notify extended-join account-notify";
+				std::string output = capMessage + "\r\n";
+				send(clientFd, output.c_str(), output.size(), 0);
+			}
+			else if(command.find("PING") == 0)
+			{
+				std::string response = "PONG" + command.substr(4) + "\r\n";
+				send(clientFd, response.c_str(), response.length(), 0);
+			}
+			else if (command.find("JOIN") == 0)
+				handleJoinCommand(clientFd, command);
+			else if (command.find("MODE") == 0)
+				handleModeCommand(clientFd, command);
+			else if (command.find("PART") == 0)
+				handlePartCommand(clientFd, command);
+			else if (command.find("MSG") == 0 || command.find("PRIVMSG") == 0)
+			{
+				handleMsgCommand(clientFd, command);
+			}
+			else
+			{
+				if (client->isRegistered())
+				{
+					if (command.find("JOIN") == 0)
+						handleJoinCommand(clientFd, command);
+					else if (command.find("PRIVMSG") == 0)
+						handleMsgCommand(clientFd, command);
+					else if (command.find("PART") == 0)
+					{
+						handlePartCommand(clientFd, command);
 					}
+					else
+					{
+						if (command.length() > 0 && command[0] != ':')
+						{
+							std::string response = "421 " + command + " :Unknown command\r\n";
+							send(clientFd, response.c_str(), response.length(), 0);
+						}
+					}
+				}
+				else
+				{
+					std::string response = "451 :You have not registered\r\n";
+					send(clientFd, response.c_str(), response.length(), 0);
 				}
 			}
 		}

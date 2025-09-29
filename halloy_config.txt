@@ -13,4 +13,3 @@ nickname = "test"
 username = "mlibucha"
 realname = "Mateusz"
 password = "pass"
-channels = ["#general"]
