@@ -14,7 +14,7 @@
 
 // void Server::handleChannelMessage(int clientFd, const std::string &target, const std::string &msgContent)
 
-void Server::handelePrivateMessage(int clientFd, const std::string &target, const std::string &msgContent)
+void Server::handlePrivateMessage(int clientFd, const std::string &target, const std::string &msgContent)
 {
 	// Find the target client by nickname
 	Client *targetClient = NULL;
@@ -82,9 +82,7 @@ void Server::handleMsgCommand(int clientFd, const std::string &message)
 		// handleChannelMessage(clientFd, target, msgContent);//to do
 	}
 	else
-	{
-		// handlePrivateMessage(clientFd, target, msgContent);//to do
-	}
+		handlePrivateMessage(clientFd, target, msgContent);//to do
 }
 
 void Server::handlePartCommand(int clientFd, const std::string &message)

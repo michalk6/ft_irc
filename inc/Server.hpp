@@ -43,7 +43,7 @@ class Server {
 		void handleInviteCommand(int clientFd, const std::string &message);			// handle invite command
 		void handleTopicCommand(int clientFd, const std::string &message);			// handle topic command
 		void handleMsgCommand(int clientFd, const std::string &message);			//	handle msg command
-		void handelePrivateMessage(int clientFd, const std::string &target,			// handle private message
+		void handlePrivateMessage(int clientFd, const std::string &target,			// handle private message
 			const std::string &msgContent);
 		void addClient(Client *client, int clientFd);
 		void handleNickCommand(int clientFd, const std::string &message);			// handle nick command
