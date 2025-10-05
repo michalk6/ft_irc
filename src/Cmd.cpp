@@ -12,7 +12,39 @@
 
 // 	void Server::handleKickCommand(int clientFd, const std::string &message)
 
-// void Server::handleChannelMessage(int clientFd, const std::string &target, const std::string &msgContent)
+void Server::handleChannelMessage(int clientFd, const std::string &channelName, const std::string &msgContent)
+{
+	std::map<std::string, Channel *> channels = _channelManager.getChannels(); // ta sama mapa co w handleJoinCommand
+
+	Client *sender = findClientByFd(clientFd);
+	if (!sender)
+		return;
+
+	// check if channel exists
+	if (channels.find(channelName) == channels.end())
+	{
+		std::string response = ":server 403 " + sender->getNickname() + " " + channelName + " :No such channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	Channel *channel = channels[channelName];
+
+	// check if client is in channel
+	std::map<int, Client *> members = channel->getMembers();
+	if (members.find(clientFd) == members.end())
+	{
+		std::string response = ":server 442 " + sender->getNickname() + " " + channelName + " :You're not on that channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	// create full message (PRIVMSG)
+	std::string fullMessage = sender->getPrefix() + " PRIVMSG " + channelName + " :" + msgContent + "\r\n";
+
+	// send to all clients in channel except sender
+	channel->broadcast(fullMessage, sender);
+}
 
 void Server::handlePrivateMessage(int clientFd, const std::string &target, const std::string &msgContent)
 {
@@ -78,11 +110,9 @@ void Server::handleMsgCommand(int clientFd, const std::string &message)
 		return;
 	}
 	if (target[0] == '#' || target[0] == '&')
-	{
-		// handleChannelMessage(clientFd, target, msgContent);//to do
-	}
+		handleChannelMessage(clientFd, target, msgContent);
 	else
-		handlePrivateMessage(clientFd, target, msgContent);//to do
+		handlePrivateMessage(clientFd, target, msgContent);
 }
 
 void Server::handlePartCommand(int clientFd, const std::string &message)
@@ -247,9 +277,7 @@ void Server::handleClientEvent(int i)// to do chenachne parsing after reciving m
 			else if (command.find("PART") == 0)
 				handlePartCommand(clientFd, command);
 			else if (command.find("MSG") == 0 || command.find("PRIVMSG") == 0)
-			{
 				handleMsgCommand(clientFd, command);
-			}
 			else
 			{
 				if (client->isRegistered())

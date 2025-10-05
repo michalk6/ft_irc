@@ -9,21 +9,7 @@
 #include "Client.hpp"
 
 class Channel {
-
-private:
-    Channel();                                          // default constructor
-    Channel(const Channel &copy);                       // copy constructor
-    Channel &operator=(const Channel &other);           // copy assignment operator
-
 public:
-    std::string                 name;           // channel name
-    std::string                 topic;          // channel topic
-    std::map<int, Client*>      members;        // map of channel members
-    std::set<int>               operators;      // set of channel operators
-    std::string                 key;            // channel password/key
-    std::set<char>              modes;          // channel modes
-    int                         userLimit;      // user limit
-
     Channel(const std::string &channelName);    // constructor
     ~Channel();                                 // destructor
 
@@ -43,6 +29,22 @@ public:
     void setMode(char mode);
     void unsetMode(char mode);
     bool hasMode(char mode) const;
+
+	const std::map<int, Client *> &getMembers() const;
+
+private:
+	std::string                 name;           // channel name
+    std::string                 topic;          // channel topic
+    std::map<int, Client*>      members;        // map of channel members
+    std::set<int>               operators;      // set of channel operators
+    std::string                 key;            // channel password/key
+    std::set<char>              modes;          // channel modes
+    int                         userLimit;      // user limit
+
+	Channel();                                          // default constructor
+	Channel(const Channel &copy);                       // copy constructor
+	Channel &operator=(const Channel &other);           // copy assignment operator
+
 };
 
 #endif

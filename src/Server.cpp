@@ -160,7 +160,7 @@ void Server::handleWhoCommand(int clientFd, const std::string &message)
 		send(clientFd, response.c_str(), response.length(), 0);
 		return;
 	}
-	for (std::map<int, Client*>::iterator it = channel->members.begin(); it != channel->members.end(); ++it) {
+	for (std::map<int, Client*>::const_iterator it = channel->getMembers().begin(); it != channel->getMembers().end(); ++it) {
 		Client* member = it->second;
 		std::string reply = ":server 352 " + channelName + " " +
 			member->getUsername() + " " +
@@ -229,7 +229,7 @@ void Server::handleJoinCommand(int clientFd, const std::string &message)
 		send(clientFd, noTopicMsg.c_str(), noTopicMsg.length(), 0);
 	}
 	std::string names;
-	for (std::map<int, Client *>::iterator it = channel->members.begin(); it != channel->members.end(); ++it)
+	for (std::map<int, Client *>::const_iterator it = channel->getMembers().begin(); it != channel->getMembers().end(); ++it)
 	{
 		if (!names.empty())
 			names += " ";
@@ -245,39 +245,6 @@ void Server::handleJoinCommand(int clientFd, const std::string &message)
 	send(clientFd, endNames.c_str(), endNames.length(), 0);
 	std::cout << "Client " << client->getNickname() << " joined channel " << channelName << std::endl;
 	std::cout << "Channel " << channelName << " now has " << channel->getMemberCount() << " members" << std::endl;
-}
-// handle message command
-void Server::handleChannelMessage(int clientFd, const std::string &channelName, const std::string &msgContent)
-{
-	static std::map<std::string, Channel *> channels; // ta sama mapa co w handleJoinCommand
-
-	Client *sender = findClientByFd(clientFd);
-	if (!sender)
-		return;
-
-	// check if channel exists
-	if (channels.find(channelName) == channels.end())
-	{
-		std::string response = ":server 403 " + sender->getNickname() + " " + channelName + " :No such channel\r\n";
-		send(clientFd, response.c_str(), response.length(), 0);
-		return;
-	}
-
-	Channel *channel = channels[channelName];
-
-	// check if client is in channel
-	if (channel->members.find(clientFd) == channel->members.end())
-	{
-		std::string response = ":server 442 " + sender->getNickname() + " " + channelName + " :You're not on that channel\r\n";
-		send(clientFd, response.c_str(), response.length(), 0);
-		return;
-	}
-
-	// create full message (PRIVMSG)
-	std::string fullMessage = sender->getPrefix() + " PRIVMSG " + channelName + " :" + msgContent + "\r\n";
-
-	// send to all clients in channel except sender
-	channel->broadcast(fullMessage, sender);
 }
 
 // Main event loop. As long as the server is running, this loop controls network traffic.

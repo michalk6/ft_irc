@@ -23,6 +23,7 @@ public:
     void removeChannel(const std::string& name);
     void removeClientFromAllChannels(int clientFd);
     std::vector<std::string> getChannelNames() const;
+	const std::map<std::string, Channel*> &getChannels() const;
 };
 
 #endif

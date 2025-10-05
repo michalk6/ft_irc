@@ -5,11 +5,32 @@
 
 ping_time = 10
 
-[servers.test1]
+[servers.mati]
 use_tls = false
 server = "localhost"
 port = 13180
-nickname = "test"
+nickname = "mati"
 username = "mlibucha"
 realname = "Mateusz"
 password = "pass"
+channels = ["#general"]
+
+[servers.michciu]
+use_tls = false
+server = "localhost"
+port = 13180
+nickname = "michciu"
+username = "mikurek"
+realname = "Michal"
+password = "pass"
+channels = ["#general"]
+
+[servers.przemo]
+use_tls = false
+server = "localhost"
+port = 13180
+nickname = "przemo"
+username = "phoehne"
+realname = "Przemek"
+password = "pass"
+channels = ["#general"]

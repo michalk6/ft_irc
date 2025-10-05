@@ -108,3 +108,7 @@ bool Client::isInChannel(const std::string &channelName) const
 {
 	return _channels.find(channelName) != _channels.end();
 }
+
+const std::map<int, Client *> &Channel::getMembers() const {
+	return members;
+}

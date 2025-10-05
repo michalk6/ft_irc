@@ -64,3 +64,7 @@ std::vector<std::string> ChannelManager::getChannelNames() const {
     }
     return names;
 }
+
+const std::map<std::string, Channel*> &ChannelManager::getChannels() const {
+	return channels;
+}
