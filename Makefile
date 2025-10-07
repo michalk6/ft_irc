@@ -38,4 +38,9 @@ debug: CXXFLAGS += -g -fsanitize=address
 debug: re
 	@echo "\033[38;5;220m--- (debug mode) --- \033[0m"
 
+run:
+	@./ircserv 13180 pass
+
+rerun: re run
+
 .PHONY: all clean fclean re debug
