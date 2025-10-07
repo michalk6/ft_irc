@@ -282,10 +282,64 @@ void Server::eventLoop()
 // handle kick command
 void Server::handleKickCommand(int clientFd, const std::string &message)
 {
-	(void)message;
-	// TODO: Implement kick command
-	std::string response = ":server 461 KICK :Not implemented yet\r\n";
-	send(clientFd, response.c_str(), response.length(), 0);
+	Client *client = findClientByFd(clientFd);
+	if (!client || !client->isRegistered()) {
+		std::string response = ":server 451 " + client->getNickname() + " :You have not registered\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::vector<std::string> tokens = ft_split(message, ' ');
+	if (tokens.size() < 3) {
+		std::string response = ":server 461 " + client->getNickname() + " KICK :Not enough parameters\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::string channelName = tokens[1];
+	std::string target = tokens[2];
+	std::string reason;
+	size_t pos = message.find(':');
+	if (pos != std::string::npos)
+		reason = message.substr(pos + 1);
+	else
+		reason = "Kicked";
+
+	Channel *channel;
+	if (!_channelManager.channelExists(channelName)) {
+		std::string response = ":server 403 " + client->getNickname() + " " + channelName + " :No such channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	else
+		channel = _channelManager.getChannel(channelName);
+	if (!channel->hasMember(clientFd)) {
+		std::string response = ":server 442 " + client->getNickname() + " " + channelName + " :You're not on that channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	if (!channel->isOperator(clientFd)) {
+		std::string response = ":server 482 " + client->getNickname() + " " + channelName + " :You're not channel operator\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	Client *targetClient = findClientByNickname(target);
+	if (!targetClient) {
+		std::string response = ":server 401 " + client->getNickname() + " " + target + " :No such nick\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	if (!channel->hasMember(targetClient->getFd())) {
+		std::string response = ":server 441 " + client->getNickname() + " " + target + " " + channelName + " :They aren't on that channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::string kickMsg = ":" + client->getPrefix() + " KICK " + channelName + " " + target + " :" + reason + "\r\n";
+
+	channel->broadcast(kickMsg);
+	channel->removeMember(targetClient->getFd());
 }
 
 // handle invite command
@@ -353,6 +407,13 @@ void Server::handleNickCommand(int clientFd, const std::string &message)
 	{
 		completeRegistration(client);
 	}
+}
+
+Client* Server::findClientByNickname(std::string const &nickname) const {
+	for (size_t i = 0; i < this->_clients.size(); ++i)
+		if (this->_clients[i]->getNickname() == nickname)
+			return this->_clients[i];
+	return NULL;
 }
 
 // handle user command

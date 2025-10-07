@@ -51,6 +51,7 @@ class Server {
 		void handlePassCommand(int clientFd, const std::string &message);			// handle password command
 		void completeRegistration(Client *client);
 		Client* findClientByFd(int clientFd);									// find client by fd
+		Client* findClientByNickname(std::string const &nickname) const;
 		std::vector<std::string> ft_split(const std::string &str, char delimiter);	// split string
 		void joindefaultChannel(int clientFd);
 		void handlePartCommand(int clientFd, const std::string &message);

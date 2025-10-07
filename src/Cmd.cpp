@@ -10,8 +10,6 @@
 
 // void Server::handleInviteCommand(int clientFd, const std::string &message)
 
-// 	void Server::handleKickCommand(int clientFd, const std::string &message)
-
 void Server::handleChannelMessage(int clientFd, const std::string &channelName, const std::string &msgContent)
 {
 	std::map<std::string, Channel *> channels = _channelManager.getChannels(); // ta sama mapa co w handleJoinCommand
@@ -246,7 +244,6 @@ void Server::handleClientEvent(int i)// to do chenachne parsing after reciving m
 			std::cout << "Received command from " << client->getNickname() << ": " << command << std::endl;
 
 			if (command.find("PASS") == 0)
-
 				handlePassCommand(clientFd, command);
 			else if (command.find("NICK") == 0)
 				handleNickCommand(clientFd, command);
@@ -278,6 +275,8 @@ void Server::handleClientEvent(int i)// to do chenachne parsing after reciving m
 				handlePartCommand(clientFd, command);
 			else if (command.find("MSG") == 0 || command.find("PRIVMSG") == 0)
 				handleMsgCommand(clientFd, command);
+			else if (command.find("KICK") == 0)
+				handleKickCommand(clientFd, command);
 			else
 			{
 				if (client->isRegistered())
