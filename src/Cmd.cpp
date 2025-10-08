@@ -4,9 +4,6 @@
 #include <ostream>
 #include "Channel.hpp"
 #include "ChannelMenager.hpp"
-// void Server::handleTopicCommand(int clientFd, const std::string &message)
-// {
-// }
 
 // void Server::handleInviteCommand(int clientFd, const std::string &message)
 
@@ -277,6 +274,8 @@ void Server::handleClientEvent(int i)// to do chenachne parsing after reciving m
 				handleMsgCommand(clientFd, command);
 			else if (command.find("KICK") == 0)
 				handleKickCommand(clientFd, command);
+			else if (command.find("TOPIC") == 0)
+				handleTopicCommand(clientFd, command);
 			else
 			{
 				if (client->isRegistered())

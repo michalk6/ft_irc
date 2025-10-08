@@ -354,10 +354,52 @@ void Server::handleInviteCommand(int clientFd, const std::string &message)
 // handle topic command
 void Server::handleTopicCommand(int clientFd, const std::string &message)
 {
-	(void)message;
-	// TODO: Implement topic command
-	std::string response = ":server 461 TOPIC :Not implemented yet\r\n";
-	send(clientFd, response.c_str(), response.length(), 0);
+	Client *client = findClientByFd(clientFd);
+	if (!client || !client->isRegistered()) {
+		std::string response = ":server 451 " + client->getNickname() + " :You have not registered\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::vector<std::string> tokens = ft_split(message, ' ');
+	if (tokens.size() < 2) {
+		std::string response = ":server 461 " + client->getNickname() + " TOPIC :Not enough parameters\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::string channelName = tokens[1];
+	
+	Channel *channel;
+	if (!_channelManager.channelExists(channelName)) {
+		std::string response = ":server 403 " + client->getNickname() + " " + channelName + " :No such channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	channel = _channelManager.getChannel(channelName);
+
+	if (tokens.size() < 3) {
+		std::string topic = channel->getTopic();
+		std::string response;
+		if (topic.empty())
+			response = ":server 331 " + client->getNickname() + " " + channelName + " :No topic is set\r\n";
+		else
+			response = ":server 332 " + client->getNickname() + " " + channelName + " :" + topic + "\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::string newTopic = message.substr(message.find(channelName) + channelName.length() + 1);
+
+	if (channel->hasMode('t') && !channel->isOperator(clientFd)) {
+		std::string response = ":server 482 " + client->getNickname() + " " + channelName + " :You're not channel operator\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	channel->setTopic(newTopic);
+	std::string topicMsg = client->getPrefix() + " TOPIC " + channelName + " :" + newTopic + "\r\n";
+	channel->broadcast(topicMsg);
 }
 
 // add client
