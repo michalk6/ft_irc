@@ -5,8 +5,6 @@
 #include "Channel.hpp"
 #include "ChannelMenager.hpp"
 
-// void Server::handleInviteCommand(int clientFd, const std::string &message)
-
 void Server::handleChannelMessage(int clientFd, const std::string &channelName, const std::string &msgContent)
 {
 	std::map<std::string, Channel *> channels = _channelManager.getChannels(); // ta sama mapa co w handleJoinCommand
