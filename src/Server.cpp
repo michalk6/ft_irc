@@ -404,7 +404,6 @@ void Server::handleInviteCommand(int clientFd, const std::string &message)
 	std::string confirmMsg = ":server 341 " + client->getNickname() + " " + target + " " + channelName + "\r\n";
 	send(clientFd, confirmMsg.c_str(), confirmMsg.length(), 0);
 	std::string inviteMsg = client->getPrefix() + " INVITE " + target + " :" + channelName + "\r\n";
-	std::cout << inviteMsg << std::endl;
 	targetClient->sendMessage(inviteMsg);
 }
 
