@@ -24,7 +24,10 @@ public:
     size_t getMemberCount() const;                                              // get member count
     void setTopic(const std::string& newTopic);                                 // set topic
     const std::string& getTopic() const;                                        // get topic
-    
+	void addInvitation(int fd);
+	void removeInvitation(int fd);
+	bool isInvited(int fd) const;
+
     // Mode management
     void setMode(char mode);
     void unsetMode(char mode);
@@ -40,6 +43,7 @@ private:
     std::string                 key;            // channel password/key
     std::set<char>              modes;          // channel modes
     int                         userLimit;      // user limit
+	std::set<int>				invitations;	// set of users by fd allowed to enter channel in invite mode
 
 	Channel();                                          // default constructor
 	Channel(const Channel &copy);                       // copy constructor

@@ -272,6 +272,8 @@ void Server::handleClientEvent(int i)// to do chenachne parsing after reciving m
 				handlePartCommand(clientFd, command);
 			else if (command.find("MSG") == 0 || command.find("PRIVMSG") == 0)
 				handleMsgCommand(clientFd, command);
+			else if (command.find("INVITE") == 0)
+				handleInviteCommand(clientFd, command);
 			else if (command.find("KICK") == 0)
 				handleKickCommand(clientFd, command);
 			else if (command.find("TOPIC") == 0)

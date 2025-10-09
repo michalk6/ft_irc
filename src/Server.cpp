@@ -215,7 +215,16 @@ void Server::handleJoinCommand(int clientFd, const std::string &message)
 		std::cout << "Client already in channel" << std::endl;
 		return;
 	}
+	if (channel->hasMode('i') && !channel->isInvited(clientFd))
+	{
+		std::cout << "Channel in invite only mode" << std::endl;
+		std::string response = ":server 473 " + client->getNickname() + " " + channelName + " :Cannot join channel (+i)\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
 	channel->addMember(client);
+	if (channel->isInvited(clientFd))
+		channel->removeInvitation(clientFd);
 	std::string joinMsg = client->getPrefix() + " JOIN " + channelName + "\r\n";
 	channel->broadcast(joinMsg);
 	if (!channel->getTopic().empty())
@@ -305,14 +314,13 @@ void Server::handleKickCommand(int clientFd, const std::string &message)
 	else
 		reason = "Kicked";
 
-	Channel *channel;
 	if (!_channelManager.channelExists(channelName)) {
 		std::string response = ":server 403 " + client->getNickname() + " " + channelName + " :No such channel\r\n";
 		send(clientFd, response.c_str(), response.length(), 0);
 		return;
 	}
-	else
-		channel = _channelManager.getChannel(channelName);
+	Channel *channel = _channelManager.getChannel(channelName);
+
 	if (!channel->hasMember(clientFd)) {
 		std::string response = ":server 442 " + client->getNickname() + " " + channelName + " :You're not on that channel\r\n";
 		send(clientFd, response.c_str(), response.length(), 0);
@@ -342,13 +350,62 @@ void Server::handleKickCommand(int clientFd, const std::string &message)
 	channel->removeMember(targetClient->getFd());
 }
 
-// handle invite command
+// handle invite command; how to use: /invite user #channel
 void Server::handleInviteCommand(int clientFd, const std::string &message)
 {
-	(void)message;
-	// TODO: Implement invite command
-	std::string response = ":server 461 INVITE :Not implemented yet\r\n";
-	send(clientFd, response.c_str(), response.length(), 0);
+	Client *client = findClientByFd(clientFd);
+	if (!client || !client->isRegistered()) {
+		std::string response = ":server 451 " + client->getNickname() + " :You have not registered\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::vector<std::string> tokens = ft_split(message, ' ');
+	if (tokens.size() < 3) {
+		std::string response = ":server 461 " + client->getNickname() + " INVITE :Not enough parameters\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	std::string target = tokens[1];
+	std::string channelName = tokens[2];
+
+	if (!_channelManager.channelExists(channelName)) {
+		std::string response = ":server 403 " + client->getNickname() + " " + channelName + " :No such channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	Channel *channel = _channelManager.getChannel(channelName);
+
+	if (!channel->hasMember(clientFd)) {
+		std::string response = ":server 442 " + client->getNickname() + " " + channelName + " :You're not on that channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	if (!channel->isOperator(clientFd) && channel->hasMode('i')) {
+		std::string response = ":server 482 " + client->getNickname() + " " + channelName + " :You're not channel operator\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	Client *targetClient = findClientByNickname(target);
+	if (!targetClient) {
+		std::string response = ":server 401 " + client->getNickname() + " " + target + " :No such nick\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	if (channel->hasMember(targetClient->getFd())) {
+		std::string response = ":server 443 " + client->getNickname() + " " + target + " " + channelName + " :is already on channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	channel->addInvitation(targetClient->getFd());
+
+	std::string confirmMsg = ":server 341 " + client->getNickname() + " " + target + " " + channelName + "\r\n";
+	send(clientFd, confirmMsg.c_str(), confirmMsg.length(), 0);
+	std::string inviteMsg = client->getPrefix() + " INVITE " + target + " :" + channelName + "\r\n";
+	std::cout << inviteMsg << std::endl;
+	targetClient->sendMessage(inviteMsg);
 }
 
 // handle topic command

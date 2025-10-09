@@ -60,7 +60,9 @@ std::string Client::getPrefix() const {
 
 // send message
 void Client::sendMessage(const std::string &message) const {
-	std::string formatted = message + "\r\n";
+	std::string formatted = message;
+	if (formatted.size() < 2 || formatted.substr(formatted.size() - 2) != "\r\n")
+		formatted += "\r\n";
 	send(_fd, formatted.c_str(), formatted.length(), 0);
 }
 

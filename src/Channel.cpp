@@ -89,6 +89,18 @@ const std::string &Channel::getTopic() const
 	return topic;
 }
 
+void Channel::addInvitation(int fd) {
+	invitations.insert(fd);
+}
+
+void Channel::removeInvitation(int fd) {
+	invitations.erase(fd);
+}
+
+bool Channel::isInvited(int fd) const {
+	return invitations.find(fd) != invitations.end();
+}
+
 void Channel::setMode(char mode)
 {
 	modes.insert(mode);
