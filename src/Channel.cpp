@@ -2,11 +2,16 @@
 #include "Channel.hpp"
 #include "Client.hpp"
 #include <algorithm>
+#include <sstream>
 
 Channel::Channel(const std::string &channelName)
-	: name(channelName), topic(""), userLimit(-1) {}
+	: name(channelName), topic(""), userLimit(0) {}
 
 Channel::~Channel() {}
+
+std::string Channel::getName() const {
+	return this->name;
+}
 
 void Channel::broadcast(const std::string &message, Client *exclude) const
 {
@@ -89,6 +94,23 @@ const std::string &Channel::getTopic() const
 	return topic;
 }
 
+void Channel::setKey(const std::string &key) {
+	this->key = key;
+}
+
+std::string Channel::getKey() const {
+	return this->key;
+}
+
+void Channel::setUserLimit(int userLimit) {
+	this->userLimit = userLimit;
+}
+
+int Channel::getUserLimit() const {
+	return this->userLimit;
+}
+
+
 void Channel::addInvitation(int fd) {
 	invitations.insert(fd);
 }
@@ -114,6 +136,26 @@ void Channel::unsetMode(char mode)
 bool Channel::hasMode(char mode) const
 {
 	return modes.find(mode) != modes.end();
+}
+
+std::string Channel::getModeString() const {
+	std::string modes("+");
+	std::string params;
+
+	if (this->hasMode('i')) modes += 'i';
+	if (this->hasMode('t')) modes += 't';
+	if (!this->key.empty()) {
+		modes += 'k';
+		params += (" " + this->key);
+	}
+	if (this->userLimit > 0) {
+		modes += 'l';
+		std::stringstream ss;
+		ss << this->userLimit;
+		params += (" " + ss.str());
+	}
+
+	return (modes == "+") ? "" : modes + params;
 }
 
 bool Client::isInChannel(const std::string &channelName) const

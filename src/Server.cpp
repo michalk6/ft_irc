@@ -292,7 +292,8 @@ void Server::eventLoop()
 void Server::handleKickCommand(int clientFd, const std::string &message)
 {
 	Client *client = findClientByFd(clientFd);
-	if (!client || !client->isRegistered()) {
+	if (!client) return;
+	if (!client->isRegistered()) {
 		std::string response = ":server 451 " + client->getNickname() + " :You have not registered\r\n";
 		send(clientFd, response.c_str(), response.length(), 0);
 		return;
@@ -354,7 +355,8 @@ void Server::handleKickCommand(int clientFd, const std::string &message)
 void Server::handleInviteCommand(int clientFd, const std::string &message)
 {
 	Client *client = findClientByFd(clientFd);
-	if (!client || !client->isRegistered()) {
+	if (!client) return;
+	if (!client->isRegistered()) {
 		std::string response = ":server 451 " + client->getNickname() + " :You have not registered\r\n";
 		send(clientFd, response.c_str(), response.length(), 0);
 		return;
@@ -411,7 +413,8 @@ void Server::handleInviteCommand(int clientFd, const std::string &message)
 void Server::handleTopicCommand(int clientFd, const std::string &message)
 {
 	Client *client = findClientByFd(clientFd);
-	if (!client || !client->isRegistered()) {
+	if (!client) return;
+	if (!client->isRegistered()) {
 		std::string response = ":server 451 " + client->getNickname() + " :You have not registered\r\n";
 		send(clientFd, response.c_str(), response.length(), 0);
 		return;

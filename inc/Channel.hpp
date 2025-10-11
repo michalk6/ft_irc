@@ -8,11 +8,14 @@
 #include <vector>
 #include "Client.hpp"
 
+#define MAX_LIMIT 10000
+
 class Channel {
 public:
     Channel(const std::string &channelName);    // constructor
     ~Channel();                                 // destructor
 
+	std::string getName() const;
     void broadcast(const std::string &message, Client *exclude = NULL) const;   // broadcast
     bool isOperator(int clientFd) const;                                        // check if client is operator
     void addMember(Client *client);                                             // add member
@@ -24,6 +27,10 @@ public:
     size_t getMemberCount() const;                                              // get member count
     void setTopic(const std::string& newTopic);                                 // set topic
     const std::string& getTopic() const;                                        // get topic
+	void setKey(const std::string &key);
+	std::string getKey() const;
+	void setUserLimit(int userLimit);
+	int getUserLimit() const;
 	void addInvitation(int fd);
 	void removeInvitation(int fd);
 	bool isInvited(int fd) const;
@@ -32,6 +39,7 @@ public:
     void setMode(char mode);
     void unsetMode(char mode);
     bool hasMode(char mode) const;
+	std::string getModeString() const;
 
 	const std::map<int, Client *> &getMembers() const;
 

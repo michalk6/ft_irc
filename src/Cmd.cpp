@@ -156,6 +156,176 @@ void Server::handlePartCommand(int clientFd, const std::string &message)
 	std::cout << "Client " << client->getNickname() << " left channel " << channelName << std::endl;
 }
 
+static std::deque<std::string> readParameters(const std::vector<std::string> &tokens) {
+	std::deque<std::string> parameters;
+	for (size_t i = 3; i < tokens.size(); i++)
+		parameters.push_back(tokens[i]);
+	return parameters;
+}
+
+static int convertLimitString(std::string const &str) {
+	for (size_t i = 0; i < str.length(); i++)
+		if (!std::isdigit(str[i]))
+			return -1;
+	long limit = std::strtol(str.c_str(), NULL, 10);
+	if (limit > MAX_LIMIT) return -1;
+	return limit;
+}
+
+bool Server::setChannelMode(char mode, Client *client, Channel *channel, std::deque<std::string> &parameters) {
+	if (mode == 'i' || mode == 't') channel->setMode(mode);
+	if (mode == 'k') {
+		if (parameters.size() <= 0) {
+			std::string response = ":server 461 " + client->getNickname() + " k :Not enough parameters\r\n";
+			send(client->getFd(), response.c_str(), response.length(), 0);
+			return false;
+		}
+		channel->setKey(parameters.front());
+		parameters.pop_front();
+	}
+	if (mode == 'o') {
+		if (parameters.size() <= 0) {
+			std::string response = ":server 461 " + client->getNickname() + " o :Not enough parameters\r\n";
+			send(client->getFd(), response.c_str(), response.length(), 0);
+			return false;
+		}
+		Client *targetClient = findClientByNickname(parameters.front());
+		parameters.pop_front();
+
+		if (targetClient == NULL) {
+			std::string response = ":server 401 " + client->getNickname() + " " + parameters.front() + " :No such nick\r\n";
+			send(client->getFd(), response.c_str(), response.length(), 0);
+			return false;
+		}
+		if (!channel->hasMember(targetClient->getFd())) {
+			std::string response = ":server 441 " + client->getNickname() + " " + targetClient->getNickname() + " :User not on channel\r\n";
+			send(client->getFd(), response.c_str(), response.length(), 0);
+			return false;
+		}
+		int targetFd = targetClient->getFd();
+		channel->addOperator(targetFd);
+	}
+	if (mode == 'l') {
+		if (parameters.size() <= 0) {
+			std::string response = ":server 461 " + client->getNickname() + " l :Not enough parameters\r\n";
+			send(client->getFd(), response.c_str(), response.length(), 0);
+			return false;
+		}
+		std::string limitStr = parameters.front();
+		parameters.pop_front();
+		int limit = convertLimitString(limitStr);
+		if(limit <= 0) {
+			std::string err = ":server 467 " + client->getNickname() + " " + channel->getName() + " :Invalid channel limit\r\n";
+			send(client->getFd(), err.c_str(), err.length(), 0);
+			return false;
+		}
+		channel->setUserLimit(limit);
+	}
+	return true;
+}
+
+bool Server::unsetChannelMode(char mode, Client *client, Channel *channel, std::deque<std::string> &parameters) {
+	if (mode == 'i' || mode == 't') channel->unsetMode(mode);
+	if (mode == 'k') {
+		channel->setKey("");
+	}
+	if (mode == 'o') {
+		if (parameters.size() <= 0) {
+			std::string response = ":server 461 " + client->getNickname() + " o :Not enough parameters\r\n";
+			send(client->getFd(), response.c_str(), response.length(), 0);
+			return false;
+		}
+		Client *targetClient = findClientByNickname(parameters.front());
+		parameters.pop_front();
+
+		if (targetClient == NULL) {
+			std::string response = ":server 401 " + client->getNickname() + " " + parameters.front() + " :No such nick\r\n";
+			send(client->getFd(), response.c_str(), response.length(), 0);
+			return false;
+		}
+		if (!channel->hasMember(targetClient->getFd())) {
+			std::string response = ":server 441 " + client->getNickname() + " " + targetClient->getNickname() + " :User not on channel\r\n";
+			send(client->getFd(), response.c_str(), response.length(), 0);
+			return false;
+		}
+		int targetFd = targetClient->getFd();
+		channel->removeOperator(targetFd);
+	}
+	if (mode == 'l') {
+		channel->setUserLimit(0);
+	}
+	return true;
+}
+
+void Server::handleChannelMode(int clientFd, const std::string &target, const std::vector<std::string> &tokens) {
+	Client *client = findClientByFd(clientFd);
+	if (!client) return;
+	if (!client->isRegistered()) {
+		std::string response = ":server 451 " + client->getNickname() + " :You have not registered\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	if (!_channelManager.channelExists(target)) {
+		std::string response = ":server 403 " + client->getNickname() + " " + target + " :No such channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	Channel *channel = _channelManager.getChannel(target);
+
+	if (!channel->hasMember(clientFd)) {
+		std::string response = ":server 442 " + client->getNickname() + " " + target + " :You're not on that channel\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	if (!channel->isOperator(clientFd)) {
+		std::string response = ":server 482 " + client->getNickname() + " " + target + " :You're not channel operator\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	if (tokens.size() < 3) {
+		std::string currentModes = channel->getModeString();
+		std::string response = ":server 324 " + client->getNickname() + " " + target + " " + currentModes + "\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
+	bool adding = false;
+	std::deque<std::string> parameters = readParameters(tokens);
+	std::string modes = tokens[2];
+	if (modes[0] != '-' && modes[0] != '+') {
+		std::string response = ":server 472 " + client->getNickname() + " " + modes + " :is unknown mode char to me\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+	std::string currentModes;
+	for (size_t i = 0; i < modes.length(); i++) {
+		if (modes[i] == '+') {
+			currentModes += '+';
+			adding = true;
+		}
+		else if (modes[i] == '-') {
+			currentModes += '-';
+			adding = false;
+		}
+		else if (modes[i] == 'i' || modes[i] == 't' || modes[i] == 'k' || modes[i] == 'o' || modes[i] == 'l') {
+			if (adding) {
+				if (setChannelMode(modes[i], client, channel, parameters))
+					currentModes += modes[i];
+			} else {
+				if (unsetChannelMode(modes[i], client, channel, parameters))
+					currentModes += modes[i];
+			}
+		} else {
+			std::string response = ":server 472 " + client->getNickname() + " " + std::string(1, modes[i]) + " :is unknown mode char to me\r\n";
+			send(clientFd, response.c_str(), response.length(), 0);
+		}
+	}
+	std::string modeChangeMsg = client->getPrefix() + " MODE " + target + " " + currentModes;
+	channel->broadcast(modeChangeMsg + "\r\n");
+}
+
 void Server::handleModeCommand(int clientFd, const std::string &message)
 {
 	std::vector<std::string> tokens = split(message, ' ');
@@ -170,7 +340,7 @@ void Server::handleModeCommand(int clientFd, const std::string &message)
 
 	if (target[0] == '#' || target[0] == '&')
 	{
-		// handleChannelMode(clientFd, tokens);//to do
+		handleChannelMode(clientFd, target, tokens);
 	}
 	else
 	{

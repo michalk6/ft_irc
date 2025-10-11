@@ -10,6 +10,7 @@
 #include <sys/socket.h> 	// for socket, setsockopt, bind, listen, accept, recv, send
 #include <sstream>			// for std::stringstream
 #include <map>
+#include <deque>
 #include "ChannelMenager.hpp"
 
 class Server {
@@ -39,6 +40,7 @@ class Server {
 		void eventLoop();									// handle events (main loop)
 
 		void handleModeCommand(int clientFd, const std::string &message);			// handle mode command
+		void handleChannelMode(int clientFd, const std::string &target, const std::vector<std::string> &tokens);
 		void handleKickCommand(int clientFd, const std::string &message);			// handle kick command
 		void handleInviteCommand(int clientFd, const std::string &message);			// handle invite command
 		void handleTopicCommand(int clientFd, const std::string &message);			// handle topic command
@@ -57,6 +59,8 @@ class Server {
 		void handlePartCommand(int clientFd, const std::string &message);
 		void handleWhoCommand(int clientFd, const std::string &message);
 		
+		bool setChannelMode(char mode, Client *client, Channel *channel, std::deque<std::string> &parameters);
+		bool unsetChannelMode(char mode, Client *client, Channel *channel, std::deque<std::string> &parameters);
 		/* 	
 			Socket is a system resource that cannot be safely copied.
 			By copying _listenFd and _pfds, both objects will point to the same descriptors. 
