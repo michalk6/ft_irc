@@ -215,13 +215,28 @@ void Server::handleJoinCommand(int clientFd, const std::string &message)
 		std::cout << "Client already in channel" << std::endl;
 		return;
 	}
+
 	if (channel->hasMode('i') && !channel->isInvited(clientFd))
 	{
-		std::cout << "Channel in invite only mode" << std::endl;
 		std::string response = ":server 473 " + client->getNickname() + " " + channelName + " :Cannot join channel (+i)\r\n";
 		send(clientFd, response.c_str(), response.length(), 0);
 		return;
 	}
+
+	if (!channel->isInvited(clientFd) && channel->getKey() != "") {
+		if (tokens.size() < 3 || tokens[2] != channel->getKey()) {
+			std::string response = ":server 475 " + client->getNickname() + " " + channelName + " :Cannot join channel (+k)\r\n";
+			send(clientFd, response.c_str(), response.length(), 0);
+			return;
+		}
+	}
+
+	if (channel->getUserLimit() > 0 && channel->getMemberCount() >= channel->getUserLimit()) {
+		std::string response = ":server 471 " + client->getNickname() + " " + channelName + " :Cannot join channel (+l)\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return;
+	}
+
 	channel->addMember(client);
 	if (channel->isInvited(clientFd))
 		channel->removeInvitation(clientFd);

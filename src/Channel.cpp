@@ -106,7 +106,7 @@ void Channel::setUserLimit(int userLimit) {
 	this->userLimit = userLimit;
 }
 
-int Channel::getUserLimit() const {
+size_t Channel::getUserLimit() const {
 	return this->userLimit;
 }
 

@@ -30,7 +30,7 @@ public:
 	void setKey(const std::string &key);
 	std::string getKey() const;
 	void setUserLimit(int userLimit);
-	int getUserLimit() const;
+	size_t getUserLimit() const;
 	void addInvitation(int fd);
 	void removeInvitation(int fd);
 	bool isInvited(int fd) const;
