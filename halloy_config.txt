@@ -34,3 +34,14 @@ username = "phoehne"
 realname = "Przemek"
 password = "pass"
 channels = ["#general"]
+
+[servers.impostor]
+use_tls = false
+server = "localhost"
+port = 13180
+nickname = "impostor"
+username = "non_grata"
+realname = "Qwe"
+password = "wrong_pass"
+channels = ["#general"]
+capabilities = ["invite-notify"]
