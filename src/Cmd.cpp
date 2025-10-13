@@ -408,8 +408,12 @@ void Server::handleClientEvent(int i)// to do chenachne parsing after reciving m
 				continue;
 			std::cout << "Received command from " << client->getNickname() << ": " << command << std::endl;
 
-			if (command.find("PASS") == 0)
+			if (command.find("PASS") == 0) {
 				handlePassCommand(clientFd, command);
+				client = findClientByFd(clientFd);
+				if (client == NULL)
+					return;
+			}
 			else if (command.find("NICK") == 0)
 				handleNickCommand(clientFd, command);
 			else if (command.find("USER") == 0)
