@@ -410,8 +410,7 @@ void Server::handleClientEvent(int i)// to do chenachne parsing after reciving m
 
 			if (command.find("PASS") == 0) {
 				handlePassCommand(clientFd, command);
-				client = findClientByFd(clientFd);
-				if (client == NULL)
+				if (findClientByFd(clientFd) == NULL)
 					return;
 			}
 			else if (command.find("NICK") == 0)

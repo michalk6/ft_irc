@@ -120,14 +120,9 @@ void Server::handleNewConnection()
 		return;
 	}
 	Client *newClient = new Client(clientFd, inet_ntoa(clientAddr.sin_addr));
-	_clients.push_back(newClient);
-	struct pollfd pfd;
-	pfd.fd = clientFd;
-	pfd.events = POLLIN;
-	_pfds.push_back(pfd);
 
 	std::cout << "New client connected (fd=" << clientFd << ")" << std::endl;
-	addClient(new Client(clientFd, inet_ntoa(clientAddr.sin_addr)), clientFd);
+	addClient(newClient, clientFd);
 }
 
 void Server::handleStdinInput()
@@ -479,12 +474,14 @@ void Server::handleTopicCommand(int clientFd, const std::string &message)
 // add client
 void Server::addClient(Client *client, int clientFd)
 {
-	(void)clientFd;
-	if (client)
-	{
+	if (client) {
 		_clients.push_back(client);
 		std::cout << "Client added to list (total: " << _clients.size() << ")" << std::endl;
 	}
+	struct pollfd pfd;
+	pfd.fd = clientFd;
+	pfd.events = POLLIN;
+	_pfds.push_back(pfd);
 }
 
 // handle nick command
