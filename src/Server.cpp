@@ -115,12 +115,14 @@ void Server::handleNewConnection()
 		std::cerr << "accept() failed" << std::endl;
 		return;
 	}
+
 	if (fcntl(clientFd, F_SETFL, O_NONBLOCK) == -1)
 	{
 		close(clientFd);
 		std::cerr << "fcntl() failed on client" << std::endl;
 		return;
 	}
+	
 	Client *newClient = new Client(clientFd, inet_ntoa(clientAddr.sin_addr));
 
 	std::cout << "New client connected (fd=" << clientFd << ")" << std::endl;
