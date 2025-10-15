@@ -7,6 +7,8 @@
 #include <fcntl.h>		// for fcntl, O_NONBLOCK, F_SETFL
 #include <netinet/in.h> // for sockaddr_in, INADDR_ANY, htons
 #include <arpa/inet.h>	// for getsockname
+#include <cctype>		// for std::isdigit
+#include <sstream>		// for std::istringstream
 
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -168,75 +170,126 @@ void Server::handleWhoCommand(int clientFd, const std::string &message)
 	// send(clientFd, endReply.c_str(), endReply.length(), 0);
 }
 
+// ====================================================================
+// handleJoinCommand:
+// ====================================================================
 void Server::handleJoinCommand(int clientFd, const std::string &message)
 {
 	Client *client = findClientByFd(clientFd);
 	if (!client || !client->isRegistered())
 	{
-		std::string response = "451 :You have not registered\r\n";
-		send(clientFd, response.c_str(), response.length(), 0);
+		sendNotRegisteredError(clientFd);
 		return;
 	}
 
 	std::vector<std::string> tokens = ft_split(message, ' ');
 	if (tokens.size() < 2)
 	{
-		std::string response = "461 JOIN :Not enough parameters\r\n";
-		send(clientFd, response.c_str(), response.length(), 0);
+		sendError(clientFd, "461", "JOIN :Not enough parameters");
 		return;
 	}
 
 	std::string channelName = tokens[1];
-	if (channelName[0] != '#' && channelName[0] != '&')
+	if (!isValidChannelName(channelName))
 	{
-		std::string response = "479 " + client->getNickname() + " " + channelName + " :Invalid channel name\r\n";
-		send(clientFd, response.c_str(), response.length(), 0);
+		sendError(clientFd, "479", client->getNickname() + " " + channelName + " :Invalid channel name");
 		return;
 	}
-	Channel *channel;
+
+	Channel *channel = getOrCreateChannel(channelName);
+	if (!channel)
+		return;
+
+	if (!validateJoinConditions(client, channel, tokens))
+		return;
+
+	joinClientToChannel(client, channel, channelName);
+}
+
+bool Server::isValidChannelName(const std::string &channelName)
+{
+	return (channelName[0] == '#' || channelName[0] == '&');
+}
+
+Channel* Server::getOrCreateChannel(const std::string &channelName)
+{
 	if (!_channelManager.channelExists(channelName))
 	{
-		channel = _channelManager.createChannel(channelName);
+		Channel *channel = _channelManager.createChannel(channelName);
 		std::cout << "Created new channel: " << channelName << std::endl;
+		return channel;
 	}
 	else
 	{
-		channel = _channelManager.getChannel(channelName);
+		Channel *channel = _channelManager.getChannel(channelName);
 		std::cout << "Found existing channel: " << channelName << std::endl;
+		return channel;
 	}
+}
+
+bool Server::validateJoinConditions(Client *client, Channel *channel, const std::vector<std::string> &tokens)
+{
+	int clientFd = client->getFd();
+	std::string channelName = channel->getName();
 
 	if (channel->hasMember(clientFd))
 	{
 		std::cout << "Client already in channel" << std::endl;
-		return;
+		return false;
 	}
 
+	// Sprawdź invite-only z możliwością ominięcia przez hasło
 	if (channel->hasMode('i') && !channel->isInvited(clientFd))
 	{
-		std::string response = ":server 473 " + client->getNickname() + " " + channelName + " :Cannot join channel (+i)\r\n";
-		send(clientFd, response.c_str(), response.length(), 0);
-		return;
+		bool hasCorrectPassword = (channel->getKey() != "" && tokens.size() >= 3 && tokens[2] == channel->getKey());
+		if (!hasCorrectPassword) {
+			sendError(clientFd, "473", client->getNickname() + " " + channelName + " :Cannot join channel (+i)");
+			return false;
+		}
+		std::cout << "Client " << client->getNickname() << " joined with correct password (bypassing +i)" << std::endl;
 	}
 
+	// Sprawdź hasło (jeśli nie ominął przez +i z hasłem)
 	if (!channel->isInvited(clientFd) && channel->getKey() != "") {
 		if (tokens.size() < 3 || tokens[2] != channel->getKey()) {
-			std::string response = ":server 475 " + client->getNickname() + " " + channelName + " :Cannot join channel (+k)\r\n";
-			send(clientFd, response.c_str(), response.length(), 0);
-			return;
+			sendError(clientFd, "475", client->getNickname() + " " + channelName + " :Cannot join channel (+k)");
+			return false;
 		}
 	}
 
+	// Sprawdź limit użytkowników
 	if (channel->getUserLimit() > 0 && channel->getMemberCount() >= channel->getUserLimit()) {
-		std::string response = ":server 471 " + client->getNickname() + " " + channelName + " :Cannot join channel (+l)\r\n";
-		send(clientFd, response.c_str(), response.length(), 0);
-		return;
+		sendError(clientFd, "471", client->getNickname() + " " + channelName + " :Cannot join channel (+l)");
+		return false;
 	}
+
+	return true;
+}
+
+void Server::joinClientToChannel(Client *client, Channel *channel, const std::string &channelName)
+{
+	int clientFd = client->getFd();
 
 	channel->addMember(client);
 	if (channel->isInvited(clientFd))
 		channel->removeInvitation(clientFd);
+
+	// Wyślij JOIN do wszystkich w kanale
 	std::string joinMsg = client->getPrefix() + " JOIN " + channelName + "\r\n";
 	channel->broadcast(joinMsg);
+
+	// Wyślij informacje o topicie
+	sendTopicInfo(client, channel, channelName);
+
+	// Wyślij listę użytkowników
+	sendNamesList(client, channel, channelName);
+
+	std::cout << "Client " << client->getNickname() << " joined channel " << channelName << std::endl;
+	std::cout << "Channel " << channelName << " now has " << channel->getMemberCount() << " members" << std::endl;
+}
+
+void Server::sendTopicInfo(Client *client, Channel *channel, const std::string &channelName)
+{
 	if (!channel->getTopic().empty())
 	{
 		std::string topicMsg = "332 " + client->getNickname() + " " + channelName + " :" + channel->getTopic();
@@ -245,26 +298,35 @@ void Server::handleJoinCommand(int clientFd, const std::string &message)
 	else
 	{
 		std::string noTopicMsg = "331 " + client->getNickname() + " " + channelName + " :No topic is set\r\n";
-		send(clientFd, noTopicMsg.c_str(), noTopicMsg.length(), 0);
+		send(client->getFd(), noTopicMsg.c_str(), noTopicMsg.length(), 0);
 	}
+}
+
+void Server::sendNamesList(Client *client, Channel *channel, const std::string &channelName)
+{
 	std::string names;
 	for (std::map<int, Client *>::const_iterator it = channel->getMembers().begin(); it != channel->getMembers().end(); ++it)
 	{
 		if (!names.empty())
 			names += " ";
 		if (channel->isOperator(it->first))
-		{
 			names += "@";
-		}
 		names += it->second->getNickname();
 	}
+
 	std::string namesReply = "353 " + client->getNickname() + " = " + channelName + " :" + names + "\r\n";
 	std::string endNames = "366 " + client->getNickname() + " " + channelName + " :End of /NAMES list\r\n";
-	send(clientFd, namesReply.c_str(), namesReply.length(), 0);
-	send(clientFd, endNames.c_str(), endNames.length(), 0);
-	std::cout << "Client " << client->getNickname() << " joined channel " << channelName << std::endl;
-	std::cout << "Channel " << channelName << " now has " << channel->getMemberCount() << " members" << std::endl;
+	
+	send(client->getFd(), namesReply.c_str(), namesReply.length(), 0);
+	send(client->getFd(), endNames.c_str(), endNames.length(), 0);
 }
+
+void Server::sendError(int clientFd, const std::string &code, const std::string &message)
+{
+	std::string response = ":server " + code + " " + message + "\r\n";
+	send(clientFd, response.c_str(), response.length(), 0);
+}
+// ====================================================================
 
 // Main event loop. As long as the server is running, this loop controls network traffic.
 void Server::eventLoop()
@@ -295,6 +357,7 @@ void Server::eventLoop()
 					handleClientEvent(i);
 			}
 		}
+		cleanupDisconnectedClients();
 	}
 }
 
@@ -600,26 +663,38 @@ void Server::handlePassCommand(int clientFd, const std::string &message)
 	}
 }
 
+/* 
+	RFC IRC compliant messages:
+		001 - Welcome message
+		002 - Host information
+		003 - Server creation info
+		004 - Server capabilities 
+*/
 void Server::completeRegistration(Client *client)
 {
-	if (client &&
-		client->isPasswordVerified() &&
-		!client->getNickname().empty() &&
-		!client->getUsername().empty())
-	{
-		client->setRegistered(true);
+	if (!client || client->isRegistered())
+		return;
 
-		// Send welcome message (without leading colon)
-		std::string welcome = "001 " + client->getNickname() + " :Welcome to the Internet Relay Network " + 
-					 client->getNickname() + "!" + client->getUsername() + "@" + client->getHostname() + "\r\n";
-		client->sendMessage(welcome);
+	if (!client->isPasswordVerified()
+			|| client->getNickname().empty()
+			|| client->getUsername().empty())
+		return;
 
-		// Auto-join default channel after successful registration
-		//joindefaultChannel(client->getFd());
+	client->setRegistered(true);
 
-		std::cout << "Client " << client->getFd() << " (" << client->getNickname()
-				  << ") successfully registered" << std::endl;
-	}
+	client->sendMessage(":server 001 " + client->getNickname() +
+		" :Welcome to the Internet Relay Network " + client->getPrefix());
+	client->sendMessage(":server 002 " + client->getNickname() +
+		" :Your host is ft_irc, running version 1.0");
+	client->sendMessage(":server 003 " + client->getNickname() +
+		" :This server was created just now");
+	client->sendMessage(":server 004 " + client->getNickname() +
+		" ft_irc 1.0 iotkl");
+
+	joindefaultChannel(client->getFd());
+
+	std::cout << "Client " << client->getFd() << " (" << client->getNickname()
+			<< ") successfully registered" << std::endl;
 }
 
 // find client by fd
@@ -691,15 +766,6 @@ Server::~Server()
 // public methods:
 // ====================================================================
 
-// start server
-void Server::start()
-{
-	std::cout << "Server starting..." << std::endl;
-
-	setupSocket();
-	eventLoop();
-}
-
 // check if port is valid
 bool Server::is_valid_port_string(const char *str)
 {
@@ -750,6 +816,31 @@ int Server::parseServerArguments(int argc, char **argv, std::string &password)
 	return static_cast<int>(port);
 }
 
+// set port to the port given by user
+void Server::setPortNumber(int p)
+{
+	if (p < 1 || p > 65535)
+		throw std::invalid_argument("Port must be between 1 and 65535");
+	_port = p;
+}
+
+// ====================================================================
+// Start server:
+// ====================================================================
+
+// start server
+void Server::start()
+{
+	std::cout << "Server starting..." << std::endl;
+
+	setupSocket();
+	eventLoop();
+}
+
+// ====================================================================
+// Finish program:
+// ====================================================================
+
 // stop server
 void Server::stop()
 {
@@ -777,10 +868,21 @@ void Server::stop()
 	_pfds.clear();
 }
 
-// set port to the port given by user
-void Server::setPortNumber(int p)
-{
-	if (p < 1 || p > 65535)
-		throw std::invalid_argument("Port must be between 1 and 65535");
-	_port = p;
+// finish program and clean resources in case of out of memory
+void Server::shutdownGracefully() {
+	std::cout << "Closing all client connections..." << std::endl;
+
+	for (size_t i = 0; i < _clients.size(); ++i) {
+		int fd = _clients[i]->getFd();
+		close(fd);
+		delete _clients[i];
+	}
+	_clients.clear();
+
+	for (size_t i = 0; i < _pfds.size(); ++i)
+		close(_pfds[i].fd);
+
+	close(_listenFd);
+
+	std::cout << "Server shut down cleanly." << std::endl;
 }

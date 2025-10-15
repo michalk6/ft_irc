@@ -155,12 +155,8 @@ std::string Channel::getModeString() const {
 		params += (" " + ss.str());
 	}
 
+	// return empty string if no modes are set
 	return (modes == "+") ? "" : modes + params;
-}
-
-bool Client::isInChannel(const std::string &channelName) const
-{
-	return _channels.find(channelName) != _channels.end();
 }
 
 const std::map<int, Client *> &Channel::getMembers() const {

@@ -50,11 +50,11 @@ public:
 	void			setPasswordVerified(bool verified);						// set password verification flag
 	void			setRealname(const std::string& realname);				// set realname
 	const			std::string& getRealname() const;						// get realname
-	void addChannel(const std::string& channelName);    // add channel to client's channel list
-	void removeChannel(const std::string& channelName); // remove channel from client's channel list
-	const std::set<std::string>& getChannels() const;  // get client's channels
-	bool isInChannel(const std::string &channelName) const;
-	const std::string& getHostname() const;
+	void			addChannel(const std::string& channelName);				// add channel to client's channel list
+	void			removeChannel(const std::string& channelName);			// remove channel from client's channel list
+	const			std::set<std::string>& getChannels() const;				// get client's channels
+	const			std::string& getHostname() const;						// get hostname
+	bool			isInChannel(const std::string &channelName) const;
 };
 
 #endif

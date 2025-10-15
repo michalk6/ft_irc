@@ -7,24 +7,25 @@
 
 void Server::handleChannelMessage(int clientFd, const std::string &channelName, const std::string &msgContent)
 {
-	std::map<std::string, Channel *> channels = _channelManager.getChannels(); // ta sama mapa co w handleJoinCommand
+	const std::map<std::string, Channel *> &channels = _channelManager.getChannels();
 
 	Client *sender = findClientByFd(clientFd);
 	if (!sender)
 		return;
 
-	// check if channel exists
-	if (channels.find(channelName) == channels.end())
+	// check if channel exists - use const_iterator
+	std::map<std::string, Channel *>::const_iterator it = channels.find(channelName);
+	if (it == channels.end())
 	{
 		std::string response = ":server 403 " + sender->getNickname() + " " + channelName + " :No such channel\r\n";
 		send(clientFd, response.c_str(), response.length(), 0);
 		return;
 	}
 
-	Channel *channel = channels[channelName];
+	Channel *channel = it->second;
 
 	// check if client is in channel
-	std::map<int, Client *> members = channel->getMembers();
+	const std::map<int, Client *> &members = channel->getMembers();
 	if (members.find(clientFd) == members.end())
 	{
 		std::string response = ":server 442 " + sender->getNickname() + " " + channelName + " :You're not on that channel\r\n";
@@ -70,22 +71,9 @@ void Server::handlePrivateMessage(int clientFd, const std::string &target, const
 	targetClient->sendMessage(fullMessage);
 }
 
-std::vector<std::string> split(const std::string &str, char delimiter)
-{
-	std::vector<std::string> tokens;
-	std::string token;
-	std::istringstream tokenStream(str);
-
-	while (std::getline(tokenStream, token, delimiter))
-	{
-		tokens.push_back(token);
-	}
-	return tokens;
-}
-
 void Server::handleMsgCommand(int clientFd, const std::string &message)
 {
-	std::vector<std::string> tokens = split(message, ' ');
+	std::vector<std::string> tokens = Server::ft_split(message, ' ');
 	if (tokens.size() < 3)
 	{
 		std::string response = ":server 461 MSG :Not enough parameters\r\n";
@@ -94,7 +82,7 @@ void Server::handleMsgCommand(int clientFd, const std::string &message)
 	}
 
 	std::string target = tokens[1];
-	std::string msgContent = message.substr(message.find(target) + target.length() + 1);
+	std::string msgContent = message.substr(message.find(target) + target.length() + 2); // incl. :
 
 	if (target.length() > 512)
 	{
@@ -189,16 +177,20 @@ bool Server::setChannelMode(char mode, Client *client, Channel *channel, std::de
 			send(client->getFd(), response.c_str(), response.length(), 0);
 			return false;
 		}
-		Client *targetClient = findClientByNickname(parameters.front());
+		
+		// get nickname before checking if user exists
+		std::string targetNick = parameters.front();
 		parameters.pop_front();
 
+		Client *targetClient = findClientByNickname(targetNick);
 		if (targetClient == NULL) {
-			std::string response = ":server 401 " + client->getNickname() + " " + parameters.front() + " :No such nick\r\n";
+			std::string response = ":server 401 " + client->getNickname() + " " + targetNick + " :No such nick\r\n";
 			send(client->getFd(), response.c_str(), response.length(), 0);
 			return false;
 		}
 		if (!channel->hasMember(targetClient->getFd())) {
-			std::string response = ":server 441 " + client->getNickname() + " " + targetClient->getNickname() + " :User not on channel\r\n";
+			// FIX: Add channel name to error response
+			std::string response = ":server 441 " + client->getNickname() + " " + targetNick + " " + channel->getName() + " :User not on channel\r\n";
 			send(client->getFd(), response.c_str(), response.length(), 0);
 			return false;
 		}
@@ -235,16 +227,20 @@ bool Server::unsetChannelMode(char mode, Client *client, Channel *channel, std::
 			send(client->getFd(), response.c_str(), response.length(), 0);
 			return false;
 		}
-		Client *targetClient = findClientByNickname(parameters.front());
+		
+		// get nickname before checking if user exists
+		std::string targetNick = parameters.front();
 		parameters.pop_front();
 
+		Client *targetClient = findClientByNickname(targetNick);
 		if (targetClient == NULL) {
-			std::string response = ":server 401 " + client->getNickname() + " " + parameters.front() + " :No such nick\r\n";
+			std::string response = ":server 401 " + client->getNickname() + " " + targetNick + " :No such nick\r\n";
 			send(client->getFd(), response.c_str(), response.length(), 0);
 			return false;
 		}
 		if (!channel->hasMember(targetClient->getFd())) {
-			std::string response = ":server 441 " + client->getNickname() + " " + targetClient->getNickname() + " :User not on channel\r\n";
+			// FIX: Add channel name to error response
+			std::string response = ":server 441 " + client->getNickname() + " " + targetNick + " " + channel->getName() + " :User not on channel\r\n";
 			send(client->getFd(), response.c_str(), response.length(), 0);
 			return false;
 		}
@@ -299,7 +295,13 @@ void Server::handleChannelMode(int clientFd, const std::string &target, const st
 		send(clientFd, response.c_str(), response.length(), 0);
 		return;
 	}
+	
 	std::string currentModes;
+	std::string modeParams;
+	
+	// Create a copy of parameters for building the message
+	std::deque<std::string> messageParams = parameters;
+	
 	for (size_t i = 0; i < modes.length(); i++) {
 		if (modes[i] == '+') {
 			currentModes += '+';
@@ -311,24 +313,37 @@ void Server::handleChannelMode(int clientFd, const std::string &target, const st
 		}
 		else if (modes[i] == 'i' || modes[i] == 't' || modes[i] == 'k' || modes[i] == 'o' || modes[i] == 'l') {
 			if (adding) {
-				if (setChannelMode(modes[i], client, channel, parameters))
+				if (setChannelMode(modes[i], client, channel, parameters)) {
 					currentModes += modes[i];
+					// Add parameters for modes that require them
+					if ((modes[i] == 'k' || modes[i] == 'o' || modes[i] == 'l') && !messageParams.empty()) {
+						modeParams += " " + messageParams.front();
+						messageParams.pop_front();
+					}
+				}
 			} else {
-				if (unsetChannelMode(modes[i], client, channel, parameters))
+				if (unsetChannelMode(modes[i], client, channel, parameters)) {
 					currentModes += modes[i];
+					// Add parameters for modes that require them (like o)
+					if (modes[i] == 'o' && !messageParams.empty()) {
+						modeParams += " " + messageParams.front();
+						messageParams.pop_front();
+					}
+				}
 			}
 		} else {
 			std::string response = ":server 472 " + client->getNickname() + " " + std::string(1, modes[i]) + " :is unknown mode char to me\r\n";
 			send(clientFd, response.c_str(), response.length(), 0);
 		}
 	}
-	std::string modeChangeMsg = client->getPrefix() + " MODE " + target + " " + currentModes;
-	channel->broadcast(modeChangeMsg + "\r\n");
+	
+	std::string modeChangeMsg = client->getPrefix() + " MODE " + target + " " + currentModes + modeParams + "\r\n";
+	channel->broadcast(modeChangeMsg);
 }
 
 void Server::handleModeCommand(int clientFd, const std::string &message)
 {
-	std::vector<std::string> tokens = split(message, ' ');
+	std::vector<std::string> tokens = Server::ft_split(message, ' ');
 	if (tokens.size() < 2)
 	{
 		std::string response = ":server 461 MODE :Not enough parameters\r\n";
@@ -364,7 +379,11 @@ void Server::joindefaultChannel(int clientFd)
 	}
 }
 
-void Server::handleClientEvent(int i)// to do chenachne parsing after reciving message and change else if to switch case
+// ====================================================================
+// client event handling:
+// ====================================================================
+
+void Server::handleClientEvent(int i)
 {
 	char buf[512];
 	int clientFd = _pfds[i].fd;
@@ -372,110 +391,312 @@ void Server::handleClientEvent(int i)// to do chenachne parsing after reciving m
 
 	if (bytes <= 0)
 	{
-		if (bytes == 0)
-			std::cout << "Client disconnected (fd=" << clientFd << ")" << std::endl;
-		else
-			std::cerr << "recv() error on fd " << clientFd << std::endl;
-
-		_channelManager.removeClientFromAllChannels(clientFd); // Comment out for now
-
-		for (size_t j = 0; j < _clients.size(); ++j)
-		{
-			if (_clients[j]->getFd() == clientFd)
-			{
-				delete _clients[j];
-				_clients.erase(_clients.begin() + j);
-				break;
-			}
-		}
-		close(clientFd);
-		_pfds.erase(_pfds.begin() + i);
+		handleClientDisconnect(i, clientFd, bytes);
 		return;
 	}
+
+	processClientMessage(clientFd, buf, bytes);
+}
+
+void Server::removeClientFromVector(int clientFd)
+{
+	for (size_t j = 0; j < _clients.size(); ++j)
+	{
+		if (_clients[j]->getFd() == clientFd)
+		{
+			delete _clients[j];
+			_clients.erase(_clients.begin() + j);
+			break;
+		}
+	}
+}
+
+void Server::handleClientDisconnect(int index, int clientFd, int bytes) {
+	if (bytes == 0)
+		std::cout << "Client disconnected (fd=" << clientFd << ")" << std::endl;
+	else
+		std::cerr << "recv() error on fd " << clientFd << std::endl;
+
+	Client* disconnectedClient = findClientByFd(clientFd);
+	
+	if (disconnectedClient) {
+		// 1. Remove client from all channels
+		_channelManager.removeClientFromAllChannels(clientFd);
+		
+		// 2. Send QUIT message to all channels the client was in
+		std::string quitMsg = disconnectedClient->getPrefix() + " QUIT :Client disconnected\r\n";
+		const std::set<std::string>& channels = disconnectedClient->getChannels();
+		for (std::set<std::string>::const_iterator it = channels.begin(); 
+			it != channels.end(); ++it) {
+			Channel* channel = _channelManager.getChannel(*it);
+			if (channel) {
+				channel->broadcast(quitMsg);
+			}
+		}
+	}
+	
+	// 3. Close socket
+	close(clientFd);
+	
+	// 4. Safe removal - mark for later cleanup
+	_pfds[index].fd = -1;
+	_clientsToRemove.push_back(clientFd);
+}
+
+// In the main loop, after processing all events:
+void Server::cleanupDisconnectedClients() {
+	// Remove from _pfds
+	for (std::vector<pollfd>::iterator it = _pfds.begin(); it != _pfds.end(); ) {
+		if (it->fd == -1) {
+			it = _pfds.erase(it);
+		} else {
+			++it;
+		}
+	}
+	
+	// Remove from _clients and free memory
+	for (std::vector<int>::iterator it = _clientsToRemove.begin(); 
+		it != _clientsToRemove.end(); ++it) {
+		removeClientFromVector(*it);
+	}
+	_clientsToRemove.clear();
+}
+
+void Server::processClientMessage(int clientFd, char* buf, int bytes)
+{
 	buf[bytes] = '\0';
 	std::string message(buf);
 	Client *client = findClientByFd(clientFd);
-	if (client)
-	{
-		client->appendBuffer(message);
-		while (client->hasCompleteCommand())
-		{
-			std::string command = client->extractCommand();
-			std::string trimmed = command;
-			trimmed.erase(0, trimmed.find_first_not_of(" \t\r\n"));
-			trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
-			if (trimmed.empty())
-				continue;
-			std::cout << "Received command from " << client->getNickname() << ": " << command << std::endl;
+	
+	if (!client)
+		return;
 
-			if (command.find("PASS") == 0) {
-				handlePassCommand(clientFd, command);
-				if (findClientByFd(clientFd) == NULL)
-					return;
-			}
-			else if (command.find("NICK") == 0)
-				handleNickCommand(clientFd, command);
-			else if (command.find("USER") == 0)
-				handleUserCommand(clientFd, command);
-			else if (command.find("QUIT") == 0)
-			{
-				// Handle QUIT
-			}
-			else if (command.find("WHO") == 0)
-				handleWhoCommand(clientFd, command);
-			else if (command.find("CAP LS 302") == 0)
-			{
-				std::cout << "Handling LS command" << std::endl;
-				std::string capMessage = ":server : CAP * LS :multi-prefix away-notify extended-join account-notify";
-				std::string output = capMessage + "\r\n";
-				send(clientFd, output.c_str(), output.size(), 0);
-			}
-			else if(command.find("PING") == 0)
-			{
-				std::string response = "PONG" + command.substr(4) + "\r\n";
-				send(clientFd, response.c_str(), response.length(), 0);
-			}
-			else if (command.find("JOIN") == 0)
-				handleJoinCommand(clientFd, command);
-			else if (command.find("MODE") == 0)
-				handleModeCommand(clientFd, command);
-			else if (command.find("PART") == 0)
-				handlePartCommand(clientFd, command);
-			else if (command.find("MSG") == 0 || command.find("PRIVMSG") == 0)
-				handleMsgCommand(clientFd, command);
-			else if (command.find("INVITE") == 0)
-				handleInviteCommand(clientFd, command);
-			else if (command.find("KICK") == 0)
-				handleKickCommand(clientFd, command);
-			else if (command.find("TOPIC") == 0)
-				handleTopicCommand(clientFd, command);
-			else
-			{
-				if (client->isRegistered())
-				{
-					if (command.find("JOIN") == 0)
-						handleJoinCommand(clientFd, command);
-					else if (command.find("PRIVMSG") == 0)
-						handleMsgCommand(clientFd, command);
-					else if (command.find("PART") == 0)
-					{
-						handlePartCommand(clientFd, command);
-					}
-					else
-					{
-						if (command.length() > 0 && command[0] != ':')
-						{
-							std::string response = "421 " + command + " :Unknown command\r\n";
-							send(clientFd, response.c_str(), response.length(), 0);
-						}
-					}
-				}
-				else
-				{
-					std::string response = "451 :You have not registered\r\n";
-					send(clientFd, response.c_str(), response.length(), 0);
-				}
-			}
+	client->appendBuffer(message);
+	
+	while (client->hasCompleteCommand())
+	{
+		std::string command = client->extractCommand();
+		std::string trimmed = trimCommand(command);
+		
+		if (trimmed.empty())
+			continue;
+			
+		processSingleCommand(client, clientFd, trimmed);
+		
+		// Check if client still exists after command processing
+		if (findClientByFd(clientFd) == NULL)
+			return;
+	}
+}
+
+std::string Server::trimCommand(const std::string& command)
+{
+	std::string trimmed = command;
+	trimmed.erase(0, trimmed.find_first_not_of(" \t\r\n"));
+	trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
+	return trimmed;
+}
+
+void Server::processSingleCommand(Client* client, int clientFd, const std::string& command)
+{
+	// ignore server messages starting with ':'
+	if (!command.empty() && command[0] == ':') {
+		std::cout << "Ignoring server message: " << command << std::endl;
+		return;
+	}
+	
+	std::cout << "Received command from " << (client->getNickname().empty() ? "unknown" : client->getNickname()) << ": " << command << std::endl;
+
+	std::vector<std::string> tokens = ft_split(command, ' ');
+	std::string cmd = tokens.empty() ? "" : tokens[0];
+
+	// add logging for MODE commands
+	if (cmd == "MODE") {
+		std::cout << "Processing MODE command for channel: " << (tokens.size() > 1 ? tokens[1] : "none") << std::endl;
+	}
+
+	if (handleCapabilityCommands(clientFd, tokens, cmd))
+		return;
+	
+	if (handleAuthenticationCommands(clientFd, tokens, cmd))
+		return;
+
+	if (!client->isRegistered())
+	{
+		sendNotRegisteredError(clientFd);
+		return;
+	}
+
+	handleRegisteredCommands(clientFd, tokens, cmd, command);
+}
+
+bool Server::handleCapabilityCommands(int clientFd, const std::vector<std::string>& tokens, const std::string& cmd)
+{
+	if (cmd != "CAP")
+		return false;
+
+	std::cout << "Handling CAP command" << std::endl;
+	
+	if (tokens.size() >= 2)
+	{
+		if (tokens[1] == "LS")
+		{
+			std::string response = "CAP * LS :\r\n";
+			send(clientFd, response.c_str(), response.length(), 0);
 		}
+		else if (tokens[1] == "END")
+		{
+			std::cout << "CAP negotiation ended for client " << clientFd << std::endl;
+		}
+		else if (tokens[1] == "REQ")
+		{
+			std::string response = "CAP * NAK :\r\n";
+			send(clientFd, response.c_str(), response.length(), 0);
+		}
+	}
+	return true;
+}
+
+std::string Server::joinTokens(const std::vector<std::string>& tokens)
+{
+	if (tokens.empty()) return "";
+	
+	std::string result;
+	for (size_t i = 0; i < tokens.size(); ++i)
+	{
+		if (i > 0) result += " ";
+		result += tokens[i];
+	}
+	return result;
+}
+
+bool Server::handleAuthenticationCommands(int clientFd, const std::vector<std::string>& tokens, const std::string& cmd)
+{
+	if (cmd == "PASS")
+	{
+		handlePassCommand(clientFd, joinTokens(tokens)); // vector -> string
+		return true;
+	}
+	else if (cmd == "NICK")
+	{
+		handleNickCommand(clientFd, joinTokens(tokens));
+		return true;
+	}
+	else if (cmd == "USER")
+	{
+		handleUserCommand(clientFd, joinTokens(tokens));
+		return true;
+	}
+	
+	return false;
+}
+
+void Server::handleRegisteredCommands(int clientFd, const std::vector<std::string>& tokens, const std::string& cmd, 
+				const std::string& fullCommand)
+{
+	// Proste if/else zamiast mapy - bardziej niezawodne
+	if (cmd == "PING") {
+		handlePingCommand(clientFd, tokens);
+	}
+	else if (cmd == "JOIN") {
+		handleJoinCommand(clientFd, fullCommand);
+	}
+	else if (cmd == "MODE") {
+		handleModeCommand(clientFd, fullCommand);
+	}
+	else if (cmd == "PART") {
+		handlePartCommand(clientFd, fullCommand);
+	}
+	else if (cmd == "MSG" || cmd == "PRIVMSG") {
+		handleMsgCommand(clientFd, fullCommand);
+	}
+	else if (cmd == "INVITE") {
+		handleInviteCommand(clientFd, fullCommand);
+	}
+	else if (cmd == "KICK") {
+		handleKickCommand(clientFd, fullCommand);
+	}
+	else if (cmd == "TOPIC") {
+		handleTopicCommand(clientFd, fullCommand);
+	}
+	else if (cmd == "WHO") {
+		handleWhoCommand(clientFd, fullCommand);
+	}
+	else if (cmd == "QUIT") {
+		handleQuitCommand(clientFd, fullCommand);
+	}
+	else {
+		sendUnknownCommandError(clientFd, cmd);
+	}
+}
+
+void Server::handleQuitCommand(int clientFd, const std::string &message)
+{
+	Client *client = findClientByFd(clientFd);
+	if (!client) return;
+
+	std::string quitMessage = "Client quit";
+	std::vector<std::string> tokens = ft_split(message, ' ');
+	
+	// Extract quit message if provided
+	if (tokens.size() >= 2) {
+		size_t pos = message.find(':');
+		if (pos != std::string::npos) {
+			quitMessage = message.substr(pos + 1);
+		}
+	}
+
+	// Broadcast quit message to all channels the client is in
+	const std::set<std::string>& clientChannels = client->getChannels();
+	for (std::set<std::string>::const_iterator it = clientChannels.begin(); it != clientChannels.end(); ++it) {
+		Channel *channel = _channelManager.getChannel(*it);
+		if (channel) {
+			std::string quitMsg = client->getPrefix() + " QUIT :" + quitMessage + "\r\n";
+			channel->broadcast(quitMsg, client);
+		}
+	}
+
+	// Remove client from all channels
+	_channelManager.removeClientFromAllChannels(clientFd);
+
+	// Send error response to client (optional)
+	std::string response = "ERROR :Closing link: " + client->getNickname() + " [Quit: " + quitMessage + "]\r\n";
+	send(clientFd, response.c_str(), response.length(), 0);
+
+	// Close connection and remove client
+	std::cout << "Client " << client->getNickname() << " quit: " << quitMessage << std::endl;
+	
+	// Find and remove from pfds
+	for (size_t i = 0; i < _pfds.size(); ++i) {
+		if (_pfds[i].fd == clientFd) {
+			close(clientFd);
+			_pfds.erase(_pfds.begin() + i);
+			break;
+		}
+	}
+	
+	// Remove from clients vector
+	removeClientFromVector(clientFd);
+}
+
+void Server::handlePingCommand(int clientFd, const std::vector<std::string>& tokens)
+{
+	std::string token = (tokens.size() > 1) ? tokens[1] : "";
+	std::string response = "PONG :" + token + "\r\n";
+	send(clientFd, response.c_str(), response.length(), 0);
+}
+
+void Server::sendNotRegisteredError(int clientFd)
+{
+	std::string response = "451 :You have not registered\r\n";
+	send(clientFd, response.c_str(), response.length(), 0);
+}
+
+void Server::sendUnknownCommandError(int clientFd, const std::string& command)
+{
+	if (!command.empty() && command[0] != ':')
+	{
+		std::string response = "421 " + command + " :Unknown command\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
 	}
 }

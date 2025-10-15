@@ -1,6 +1,8 @@
 #include "Client.hpp"
 #include <sys/socket.h>
 #include <ctime>
+#include <iostream>
+#include <cerrno>
 
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 // |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -13,7 +15,8 @@
 // ====================================================================
 
 // constructor
-Client::Client(int clientFd, const std::string &host) : _fd(clientFd), _hostname(host), _registered(false), _lastActivity(time(NULL)) {}
+Client::Client(int clientFd, const std::string &host) : _fd(clientFd), _hostname(host), 
+				_registered(false), _passwordVerified(false),_lastActivity(time(NULL)) {}
 
 // destructor
 Client::~Client() {}
@@ -23,9 +26,9 @@ Client::~Client() {}
 // ====================================================================
 
 // getters
-int Client::getFd() const { return _fd; }										// get client socket
-const std::string& Client::getNickname() const { return _nickname; }			// get nickname
-const std::string& Client::getUsername() const { return _username; }			// get username
+int Client::getFd() const { return _fd; }									// get client socket
+const std::string& Client::getNickname() const { return _nickname; }		// get nickname
+const std::string& Client::getUsername() const { return _username; }		// get username
 bool Client::isRegistered() const { return _registered; }					// check if client is registered
 
 // setters
@@ -63,7 +66,11 @@ void Client::sendMessage(const std::string &message) const {
 	std::string formatted = message;
 	if (formatted.size() < 2 || formatted.substr(formatted.size() - 2) != "\r\n")
 		formatted += "\r\n";
-	send(_fd, formatted.c_str(), formatted.length(), 0);
+	int bytes_sent = send(_fd, formatted.c_str(), formatted.length(), 0);
+	if (bytes_sent == -1) {
+		std::cerr << "send() error for client " << _fd << " (" << _nickname 
+				<< ") - error code: " << errno << std::endl;
+	}
 }
 
 // -------------------------------------------------------registration 
@@ -89,19 +96,24 @@ const std::string& Client::getRealname() const {
 }
 
 void Client::addChannel(const std::string& channelName) {
-    _channels.insert(channelName);
+	_channels.insert(channelName);
 }
 
 // remove channel from client's channel list
 void Client::removeChannel(const std::string& channelName) {
-    _channels.erase(channelName);
+	_channels.erase(channelName);
 }
 
 // get client's channels
 const std::set<std::string>& Client::getChannels() const {
-    return _channels;
+	return _channels;
 }
 
 const std::string& Client::getHostname() const {
-    return _hostname;
+	return _hostname;
+}
+
+bool Client::isInChannel(const std::string &channelName) const
+{
+	return _channels.find(channelName) != _channels.end();
 }
