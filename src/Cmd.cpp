@@ -82,7 +82,7 @@ void Server::handleMsgCommand(int clientFd, const std::string &message)
 	}
 
 	std::string target = tokens[1];
-	std::string msgContent = message.substr(message.find(target) + target.length() + 2); // incl. :
+	std::string msgContent = message.substr(message.find(target) + target.length() + 1); // incl. :
 
 	if (target.length() > 512)
 	{
