@@ -146,30 +146,43 @@ void Server::handleStdinInput()
 }
 void Server::handleWhoCommand(int clientFd, const std::string &message)
 {
-	std::vector<std::string> tokens = ft_split(message, ' ');
-	if (tokens.size() < 2) {
-		std::string response = ":server 461 WHO :Not enough parameters\r\n";
+	Client *requester = findClientByFd(clientFd);
+	if (!requester)
+		return ;
+	if (!requester->isRegistered())
+	{
+		std::string response = ":server 451 " + requester->getNickname() + " :You have not registered\r\n";
 		send(clientFd, response.c_str(), response.length(), 0);
-		return;
+		return ;
+	}
+	std::vector<std::string> tokens = ft_split(message, ' ');
+	if (tokens.size() < 2)
+	{
+		std::string response = ":server 461 " + requester->getNickname() + " WHO :Not enough parameters\r\n";
+		send(clientFd, response.c_str(), response.length(), 0);
+		return ;
 	}
 	std::string channelName = tokens[1];
-	Channel* channel = _channelManager.getChannel(channelName);
-	if (!channel) {
-		std::string response = ":server 403 " + channelName + " :No such channel\r\n";
+	if (!_channelManager.channelExists(channelName))
+	{
+		std::string response = ":server 403 " + requester->getNickname() + " " + channelName + " :No such channel\r\n";
 		send(clientFd, response.c_str(), response.length(), 0);
-		return;
+		return ;
 	}
-	for (std::map<int, Client*>::const_iterator it = channel->getMembers().begin(); it != channel->getMembers().end(); ++it) {
-		Client* member = it->second;
-		std::string reply = ":server 352 " + channelName + " " +
-			member->getUsername() + " " +
-			member->getHostname() + " server " +
-			member->getNickname() + " H :0 " +
-			member->getRealname() + "\r\n";
+	Channel *channel = _channelManager.getChannel(channelName);
+	for (std::map<int, Client *>::const_iterator it = channel->getMembers().begin(); it != channel->getMembers().end(); ++it)
+	{
+		Client *member = it->second;
+		std::string reply = ":server 352 " + requester->getNickname() + " " +
+							channelName + " " +
+							member->getUsername() + " " +
+							member->getHostname() + " server " +
+							member->getNickname() + " H :0 " +
+							member->getRealname() + "\r\n";
 		send(clientFd, reply.c_str(), reply.length(), 0);
 	}
-	// std::string endReply = ":server 315 " + channelName + " :End of WHO list\r\n";
-	// send(clientFd, endReply.c_str(), endReply.length(), 0);
+	std::string endReply = ":server 315 " + requester->getNickname() + " " + channelName + " :End of WHO list\r\n";
+	send(clientFd, endReply.c_str(), endReply.length(), 0);
 }
 
 // ====================================================================
