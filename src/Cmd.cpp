@@ -33,8 +33,9 @@ void Server::handleChannelMessage(int clientFd, const std::string &channelName, 
 		return;
 	}
 
+	std::string filtered = _bot.filterMessage(msgContent);
 	// create full message (PRIVMSG)
-	std::string fullMessage = sender->getPrefix() + " PRIVMSG " + channelName + " :" + msgContent + "\r\n";
+	std::string fullMessage = sender->getPrefix() + " PRIVMSG " + channelName + " :" + filtered + "\r\n";
 
 	// send to all clients in channel except sender
 	channel->broadcast(fullMessage, sender);

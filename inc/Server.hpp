@@ -12,6 +12,7 @@
 #include <map>
 #include <deque>
 #include "ChannelMenager.hpp"
+#include "Bot.hpp"
 
 class Server {
 
@@ -26,6 +27,7 @@ class Server {
 		std::vector<std::string>	_channels;					// list of channels
 		ChannelManager				_channelManager;
 		std::vector<int>			_clientsToRemove;			// list of clients that need to be removed
+		Bot							_bot;
 
 		// client event handling:    -----------------------------------------------------------------------------------------------------
 		void 	handleClientEvent(int i);													// handle existing connection - main function
