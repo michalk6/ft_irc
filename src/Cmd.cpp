@@ -36,27 +36,15 @@ void Server::handleChannelNotice(int clientFd, const std::string &channelName, c
 void Server::handlePrivateNotice(int clientFd, const std::string &target, const std::string &msgContent)
 {
 	// Find the target client by nickname
-	Client *targetClient = NULL;
-	for (size_t i = 0; i < _clients.size(); ++i)
-	{
-		if (_clients[i]->getNickname() == target)
-		{
-			targetClient = _clients[i];
-			break;
-		}
-	}
+	Client *targetClient = findClientByNickname(target);
 	if (!targetClient)
 		return;
 
-	std::string senderPrefix;
-	for (size_t i = 0; i < _clients.size(); ++i)
-	{
-		if (_clients[i]->getFd() == clientFd)
-		{
-			senderPrefix = _clients[i]->getPrefix();
-			break;
-		}
-	}
+	Client *sender = findClientByFd(clientFd);
+	if (!sender)
+		return;
+	std::string senderPrefix = sender->getPrefix();
+
 	std::string fullMessage = senderPrefix + " NOTICE " + target + " :" + msgContent + "\r\n";
 	targetClient->sendMessage(fullMessage);
 }
@@ -117,30 +105,19 @@ void Server::handleChannelMessage(int clientFd, const std::string &channelName, 
 void Server::handlePrivateMessage(int clientFd, const std::string &target, const std::string &msgContent)
 {
 	// Find the target client by nickname
-	Client *targetClient = NULL;
-	for (size_t i = 0; i < _clients.size(); ++i)
-	{
-		if (_clients[i]->getNickname() == target)
-		{
-			targetClient = _clients[i];
-			break;
-		}
-	}
+	Client *targetClient = findClientByNickname(target);
 	if (!targetClient)
 	{
 		std::string response = ":server 401 " + target + " :No such nick/channel\r\n";
 		send(clientFd, response.c_str(), response.length(), 0);
 		return;
 	}
-	std::string senderPrefix;
-	for (size_t i = 0; i < _clients.size(); ++i)
-	{
-		if (_clients[i]->getFd() == clientFd)
-		{
-			senderPrefix = _clients[i]->getPrefix();
-			break;
-		}
-	}
+
+	Client *sender = findClientByFd(clientFd);
+	if (!sender)
+		return;
+	std::string senderPrefix = sender->getPrefix();
+
 	std::string fullMessage = senderPrefix + " PRIVMSG " + target + " :" + msgContent + "\r\n";
 	targetClient->sendMessage(fullMessage);
 }
