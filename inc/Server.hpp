@@ -64,6 +64,11 @@ class Server {
 		void	handleInviteCommand(int clientFd, const std::string &message);			// handle invite command
 		void	handleTopicCommand(int clientFd, const std::string &message);			// handle topic command
 		void	handleMsgCommand(int clientFd, const std::string &message);				// handle msg command
+		void 	handleChannelMessage(int clientFd, const std::string &channelName, const std::string &msgContent);
+		void	handlePrivateMessage(int clientFd, const std::string &target, const std::string &msgContent);
+		void	handleNoticeCommand(int clientFd, const std::string &message);				// handle msg command
+		void 	handleChannelNotice(int clientFd, const std::string &channelName, const std::string &msgContent);
+		void	handlePrivateNotice(int clientFd, const std::string &target, const std::string &msgContent);
 		void	addClient(Client *client, int clientFd);
 		void	handleNickCommand(int clientFd, const std::string &message);			// handle nick command
 		void	handleUserCommand(int clientFd, const std::string &message);			// handle user command
@@ -87,9 +92,7 @@ class Server {
 		Channel* getOrCreateChannel(const std::string &channelName);
 		// --------------------------------------------------------------------------------------------------------------------------------
 
-		void 	handleChannelMessage(int clientFd, const std::string &channelName, const std::string &msgContent);	// handle channel message
 		void	handleChannelMode(int clientFd, const std::string &target, const std::vector<std::string> &tokens);
-		void	handlePrivateMessage(int clientFd, const std::string &target, const std::string &msgContent);
 
 		bool	setChannelMode(char mode, Client *client, Channel *channel, std::deque<std::string> &parameters);
 		bool	unsetChannelMode(char mode, Client *client, Channel *channel, std::deque<std::string> &parameters);

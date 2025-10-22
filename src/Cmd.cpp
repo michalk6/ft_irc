@@ -5,6 +5,79 @@
 #include "Channel.hpp"
 #include "ChannelMenager.hpp"
 
+void Server::handleChannelNotice(int clientFd, const std::string &channelName, const std::string &msgContent)
+{
+	const std::map<std::string, Channel *> &channels = _channelManager.getChannels();
+
+	Client *sender = findClientByFd(clientFd);
+	if (!sender)
+		return;
+
+	// check if channel exists - use const_iterator
+	std::map<std::string, Channel *>::const_iterator it = channels.find(channelName);
+	if (it == channels.end())
+		return;
+
+	Channel *channel = it->second;
+
+	// check if client is in channel
+	const std::map<int, Client *> &members = channel->getMembers();
+	if (members.find(clientFd) == members.end())
+		return;
+
+	std::string filtered = _bot.filterMessage(msgContent);
+	// create full message (NOTICE)
+	std::string fullMessage = sender->getPrefix() + " NOTICE " + channelName + " :" + filtered + "\r\n";
+
+	// send to all clients in channel except sender
+	channel->broadcast(fullMessage, sender);
+}
+
+void Server::handlePrivateNotice(int clientFd, const std::string &target, const std::string &msgContent)
+{
+	// Find the target client by nickname
+	Client *targetClient = NULL;
+	for (size_t i = 0; i < _clients.size(); ++i)
+	{
+		if (_clients[i]->getNickname() == target)
+		{
+			targetClient = _clients[i];
+			break;
+		}
+	}
+	if (!targetClient)
+		return;
+
+	std::string senderPrefix;
+	for (size_t i = 0; i < _clients.size(); ++i)
+	{
+		if (_clients[i]->getFd() == clientFd)
+		{
+			senderPrefix = _clients[i]->getPrefix();
+			break;
+		}
+	}
+	std::string fullMessage = senderPrefix + " NOTICE " + target + " :" + msgContent + "\r\n";
+	targetClient->sendMessage(fullMessage);
+}
+
+void Server::handleNoticeCommand(int clientFd, const std::string &message)
+{
+	std::vector<std::string> tokens = Server::ft_split(message, ' ');
+	if (tokens.size() < 3)
+		return;
+
+	std::string target = tokens[1];
+	std::string msgContent = message.substr(message.find(target) + target.length() + 1); // incl. :
+
+	if (target.length() > 512)
+		return;
+	if (target[0] == '#' || target[0] == '&')
+		handleChannelNotice(clientFd, target, msgContent);
+	else
+		handlePrivateNotice(clientFd, target, msgContent);
+}
+
 void Server::handleChannelMessage(int clientFd, const std::string &channelName, const std::string &msgContent)
 {
 	const std::map<std::string, Channel *> &channels = _channelManager.getChannels();
@@ -610,6 +683,9 @@ void Server::handleRegisteredCommands(int clientFd, const std::vector<std::strin
 	}
 	else if (cmd == "MSG" || cmd == "PRIVMSG") {
 		handleMsgCommand(clientFd, fullCommand);
+	}
+	else if (cmd == "NOTICE") {
+		handleNoticeCommand(clientFd, fullCommand);
 	}
 	else if (cmd == "INVITE") {
 		handleInviteCommand(clientFd, fullCommand);
