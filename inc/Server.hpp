@@ -77,6 +77,8 @@ class Server {
 		void	joindefaultChannel(int clientFd);
 		void	handlePartCommand(int clientFd, const std::string &message);
 		void	handleWhoCommand(int clientFd, const std::string &message);
+		void	handleSendCommand(int clientFd, const std::string &message);
+		void	handleFileCommand(Server *server, int clientFd, const std::string &message);
 		
 		Client*	findClientByFd(int clientFd);										// find client by fd
 		Client*	findClientByNickname(std::string const &nickname) const;

@@ -56,7 +56,9 @@ void Server::handleNoticeCommand(int clientFd, const std::string &message)
 		return;
 
 	std::string target = tokens[1];
-	std::string msgContent = message.substr(message.find(target) + target.length() + 1); // incl. :
+	std::string msgContent = message.substr(message.find(target) + target.length() + 1);
+	if(msgContent[0]==':')
+		msgContent = msgContent.substr(1);
 
 	if (target.length() > 512)
 		return;
@@ -133,8 +135,9 @@ void Server::handleMsgCommand(int clientFd, const std::string &message)
 	}
 
 	std::string target = tokens[1];
-	std::string msgContent = message.substr(message.find(target) + target.length() + 1); // incl. :
-
+	std::string msgContent = message.substr(message.find(target) + target.length() + 1);
+	if(msgContent[0]==':')
+		msgContent = msgContent.substr(1);
 	if (target.length() > 512)
 	{
 		std::string response = ":server 412 :Target too long\r\n";
@@ -641,6 +644,179 @@ bool Server::handleAuthenticationCommands(int clientFd, const std::vector<std::s
 	
 	return false;
 }
+// #include <fstream>
+// #include <sstream>
+// #include <algorithm>
+
+// // Base64 character set
+// static const std::string base64_chars =
+// 	"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+// 	"abcdefghijklmnopqrstuvwxyz"
+// 	"0123456789+/";
+
+// // Base64 encode function (C++98 compatible)
+// static std::string base64_encode(const std::string &in) {
+// 	std::string out;
+// 	int val = 0, valb = -6;
+
+// 	for (std::string::const_iterator it = in.begin(); it != in.end(); ++it) {
+// 		unsigned char c = *it;
+// 		val = (val << 8) + c;
+// 		valb += 8;
+// 		while (valb >= 0) {
+// 			out.push_back(base64_chars[(val >> valb) & 0x3F]);
+// 			valb -= 6;
+// 		}
+// 	}
+// 	if (valb > -6) {
+// 		out.push_back(base64_chars[((val << 8) >> (valb + 8)) & 0x3F]);
+// 	}
+// 	while (out.size() % 4) {
+// 		out.push_back('=');
+// 	}
+// 	return out;
+// }
+
+// // Base64 decode function (C++98 compatible)
+// static std::string base64_decode(const std::string &in) {
+// 	std::vector<int> T(256, -1);
+// 	for (int i = 0; i < 64; i++) {
+// 		T[(unsigned char)base64_chars[i]] = i;
+// 	}
+
+// 	std::string out;
+// 	std::vector<int> buf(4);
+// 	int pad_count = 0;
+
+// 	for (size_t i = 0; i < in.size();) {
+// 		int len = 0;
+// 		for (int j = 0; j < 4 && i < in.size(); ++i) {
+// 			unsigned char c = in[i];
+// 			if (c == '=') {
+// 				buf[j++] = 0;
+// 				++pad_count;
+// 				len++;
+// 				break;
+// 			}
+// 			if (T[c] != -1) {
+// 				buf[j++] = T[c];
+// 				++len;
+// 			}
+// 		}
+// 		if (len == 0) break;
+// 		out.push_back((buf[0] << 2) | ((buf[1] & 0x30) >> 4));
+// 		if (len > 2) out.push_back(((buf[1] & 0xf) << 4) | ((buf[2] & 0x3c) >> 2));
+// 		if (len > 3) out.push_back(((buf[2] & 0x3) << 6) | buf[3]);
+// 	}
+// 	return out;
+// }
+
+// // ATOB wrapper
+// static std::string ATOB(const std::string &s) {
+// 	return base64_decode(s);
+// }
+
+// // Function to save decoded base64 to file
+// static bool saveBase64ToFile(const std::string &outPath, const std::string &base64data) {
+// 	std::string bin = ATOB(base64data);
+// 	std::ofstream ofs(outPath.c_str(), std::ios::binary);
+// 	if (!ofs.is_open()) return false;
+// 	ofs.write(bin.data(), static_cast<std::streamsize>(bin.size()));
+// 	return true;
+// }
+
+// void Server::handleSendCommand(int clientFd, const std::string &message)
+// {
+// 	Client *client = findClientByFd(clientFd);
+// 	if (!client || !client->isRegistered())
+// 		return ;
+// 	std::vector<std::string> tokens = ft_split(message, ' ');
+// 	if (tokens.size() < 2)
+// 	{
+// 		std::string response = ":server 461 SEND :Not enough parameters\r\n";
+// 		send(clientFd, response.c_str(), response.length(), 0);
+// 		return ;
+// 	}
+// 	std::string filePath = message.substr(message.find(' ') + 1);
+
+// 	std::ifstream ifs(filePath.c_str(), std::ios::binary);
+// 	if (!ifs.is_open())
+// 	{
+// 		std::string response = ":server 404 " + client->getNickname() + " " + filePath + " :No such file\r\n";
+// 		send(clientFd, response.c_str(), response.length(), 0);
+// 		return;
+// 	}
+
+// 	std::ostringstream ss;
+// 	ss << ifs.rdbuf();
+// 	std::string fileData = ss.str();
+// 	ifs.close();
+
+// 	// Encode to base64
+// 	std::string encoded = base64_encode(fileData);
+
+// 	// Determine filename to advertise (basename)
+// 	std::string filename = filePath;
+// 	size_t pos = filename.find_last_of("/\\");
+// 	if (pos != std::string::npos) {
+// 		filename = filename.substr(pos + 1);
+// 	}
+
+// 	// Send file data - replace with available Bot method or direct channel messaging
+// 	// Since sendMessageToChannel doesn't exist, use handleChannelMessage instead
+// 	const std::string CHANNEL_NAME = "#general";
+
+// 	// Send in chunks to avoid huge single messages
+// 	const size_t CHUNK_SIZE = 4000;
+// 	for (size_t i = 0; i < encoded.size(); i += CHUNK_SIZE)
+// 	{
+// 		std::string chunk = encoded.substr(i, std::min(CHUNK_SIZE, encoded.size() - i));
+// 		// Format: FILE <filename> :<base64_chunk>
+// 		std::string fileMsg = "FILE " + filename + " :" + chunk;
+// 		handleChannelMessage(clientFd, CHANNEL_NAME, fileMsg);
+// 	}
+
+// 	// Signal end of file
+// 	std::string endMsg = "FILE_END " + filename;
+// 	handleChannelMessage(clientFd, CHANNEL_NAME, endMsg);
+// }
+
+// void Server::handleFileCommand(Server *server, int clientFd, const std::string &message)
+// {
+// 	Client *client = server->findClientByFd(clientFd);
+// 	if (!client || !client->isRegistered())
+// 		return ;
+
+// 	std::vector<std::string> tokens = ft_split(message, ' ');
+// 	if (tokens.size() < 2)
+// 		return ;
+
+// 	std::string command = tokens[0];
+// 	std::string filename = tokens[1];
+
+// 	if (command == "FILE")
+// 	{
+// 		// Extract base64 data
+// 		size_t pos = message.find(':');
+// 		if (pos == std::string::npos)
+// 			return ;
+// 		std::string base64data = message.substr(pos + 1);
+
+// 		// Save to temporary file
+// 		std::string tempFilePath = "./received_" + filename;
+// 		if (!saveBase64ToFile(tempFilePath, base64data))
+// 		{
+// 			std::cerr << "Failed to save file chunk for " << filename << std::endl;
+// 			return ;
+// 		}
+
+// 		std::cout << "Received file chunk for " << filename << " from " << client->getNickname() << std::endl;
+// 	}
+// 	else if (command == "FILE_END")
+// 	{
+// 		std::cout << "Completed receiving file " << filename << " from " << client->getNickname() << std::endl;
+// 	}
+// }
 
 void Server::handleRegisteredCommands(int clientFd, const std::vector<std::string>& tokens, const std::string& cmd, 
 				const std::string& fullCommand)
@@ -649,6 +825,12 @@ void Server::handleRegisteredCommands(int clientFd, const std::vector<std::strin
 	if (cmd == "PING") {
 		handlePingCommand(clientFd, tokens);
 	}
+	// else if(cmd == "FILE" || cmd == "FILE_END") {
+	// 	handleFileCommand(this, clientFd, fullCommand);
+	// }
+	// else if(cmd == "SEND") {
+	// 	handleSendCommand(clientFd, fullCommand);
+	// }
 	else if (cmd == "JOIN") {
 		handleJoinCommand(clientFd, fullCommand);
 	}
